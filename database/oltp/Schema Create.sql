@@ -697,6 +697,9 @@ CREATE TABLE Application.Address (
 );
 GO
 
+--TODO: ??? Add https://docs.microsoft.com/en-us/sql/t-sql/spatial-geography/spatial-types-geography?redirectedfrom=MSDN&view=sql-server-ver15
+
+
 ALTER TABLE Application.Address WITH CHECK
 ADD
     CONSTRAINT Address_City FOREIGN KEY (CityId) REFERENCES Application.City (CityId);
@@ -1620,4 +1623,12 @@ EXEC sys.sp_addextendedproperty
    ,@level1name = N'PurchaseOrder';
 GO
 
---LEFT OFF WITH PurchaseOrderLines
+--TODO: Add PurchaseOrderLines and other tables in Purchasing schema from WideWorldImporters
+--TODO: HR tables from AdventureWorks2019
+--TODO: Document table that links has a URI to the document on the file system, HR can link to resumes
+--TODO: Linking table for Customer, Supplier
+--TODO: Add Production schema tables from AdventureWorks2019
+--TODO: Add Warehouse tables from WideWorldImporters
+--TODO: Add Sales tables from WideWorldImporters
+--TODO: Sales Pipeline, leads, ...
+--TODO: Auth, roles, membership
