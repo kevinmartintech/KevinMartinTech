@@ -76,10 +76,10 @@ ADD
     CONSTRAINT Person_RowUpdatePerson FOREIGN KEY (RowUpdatePersonId) REFERENCES Application.Person (PersonId);
 GO
 
-ALTER TABLE Application.Person WITH CHECK
-ADD
-    CONSTRAINT Person_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
-GO
+--ALTER TABLE Application.Person WITH CHECK
+--ADD
+--    CONSTRAINT Person_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
+--GO
 
 ALTER TABLE Application.Person WITH CHECK
 ADD
@@ -180,13 +180,9 @@ EXEC sys.sp_addextendedproperty
 GO
 
 SET IDENTITY_INSERT Application.Person ON;
-INSERT INTO Application.Person (PersonId, FirstName, MiddleName, LastName)
+INSERT INTO Application.Person (PersonId, FirstName, MiddleName, LastName, RowUpdatePersonId)
 VALUES
-     (-1
-     ,N'Data'       -- FirstName - nvarchar(100)
-     ,N'Conversion' -- MiddleName - nvarchar(100)
-     ,N'Only'       -- LastName - nvarchar(100)
-    );
+     (1, N'Data', N'Conversion', N'Only', 1);
 SET IDENTITY_INSERT Application.Person OFF;
 
 /**********************************************************************************************************************
@@ -218,10 +214,10 @@ ADD
     CONSTRAINT CountryRegion_RowUpdatePerson FOREIGN KEY (RowUpdatePersonId) REFERENCES Application.Person (PersonId);
 GO
 
-ALTER TABLE Application.CountryRegion WITH CHECK
-ADD
-    CONSTRAINT CountryRegion_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
-GO
+--ALTER TABLE Application.CountryRegion WITH CHECK
+--ADD
+--    CONSTRAINT CountryRegion_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
+--GO
 
 ALTER TABLE Application.CountryRegion WITH CHECK
 ADD
@@ -370,10 +366,10 @@ ADD
     CONSTRAINT StateProvince_RowUpdatePerson FOREIGN KEY (RowUpdatePersonId) REFERENCES Application.Person (PersonId);
 GO
 
-ALTER TABLE Application.StateProvince WITH CHECK
-ADD
-    CONSTRAINT StateProvince_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
-GO
+--ALTER TABLE Application.StateProvince WITH CHECK
+--ADD
+--    CONSTRAINT StateProvince_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
+--GO
 
 ALTER TABLE Application.StateProvince WITH CHECK
 ADD
@@ -465,10 +461,10 @@ ADD
     CONSTRAINT City_RowUpdatePerson FOREIGN KEY (RowUpdatePersonId) REFERENCES Application.Person (PersonId);
 GO
 
-ALTER TABLE Application.City WITH CHECK
-ADD
-    CONSTRAINT City_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
-GO
+--ALTER TABLE Application.City WITH CHECK
+--ADD
+--    CONSTRAINT City_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
+--GO
 
 ALTER TABLE Application.City WITH CHECK
 ADD
@@ -544,10 +540,10 @@ ADD
     CONSTRAINT AddressType_RowUpdatePerson FOREIGN KEY (RowUpdatePersonId) REFERENCES Application.Person (PersonId);
 GO
 
-ALTER TABLE Application.AddressType WITH CHECK
-ADD
-    CONSTRAINT AddressType_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
-GO
+--ALTER TABLE Application.AddressType WITH CHECK
+--ADD
+--    CONSTRAINT AddressType_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
+--GO
 
 ALTER TABLE Application.AddressType WITH CHECK
 ADD
@@ -601,15 +597,14 @@ EXEC sys.sp_addextendedproperty
    ,@level1name = N'AddressType';
 GO
 
-INSERT INTO Application.AddressType (AddressTypeId, AddressTypeName)
+INSERT INTO Application.AddressType (AddressTypeId, AddressTypeName, RowUpdatePersonId)
 VALUES
-     (-1, N'Default')
-    ,(1, N'Main')
-    ,(2, N'Billing')
-    ,(3, N'Remit')
-    ,(4, N'Home')
-    ,(5, N'Shipping')
-    ,(6, N'Archive');
+     (1, N'Main', 1)
+    ,(2, N'Billing', 1)
+    ,(3, N'Remit', 1)
+    ,(4, N'Home', 1)
+    ,(5, N'Shipping', 1)
+    ,(6, N'Archive', 1);
 
 /**********************************************************************************************************************
 ** Create EmailType
@@ -632,10 +627,10 @@ ADD
     CONSTRAINT EmailType_RowUpdatePerson FOREIGN KEY (RowUpdatePersonId) REFERENCES Application.Person (PersonId);
 GO
 
-ALTER TABLE Application.EmailType WITH CHECK
-ADD
-    CONSTRAINT EmailType_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
-GO
+--ALTER TABLE Application.EmailType WITH CHECK
+--ADD
+--    CONSTRAINT EmailType_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
+--GO
 
 ALTER TABLE Application.EmailType WITH CHECK
 ADD
@@ -678,11 +673,10 @@ EXEC sys.sp_addextendedproperty
    ,@level1name = N'EmailType';
 GO
 
-INSERT INTO Application.EmailType (EmailTypeId, EmailTypeName)
+INSERT INTO Application.EmailType (EmailTypeId, EmailTypeName, RowUpdatePersonId)
 VALUES
-     (-1, N'Default')
-    ,(1, N'Home')
-    ,(2, N'Work');
+     (1, N'Home', 1)
+    ,(2, N'Work', 1);
 
 /**********************************************************************************************************************
 ** Create Address
@@ -713,10 +707,10 @@ ADD
     CONSTRAINT Address_RowUpdatePerson FOREIGN KEY (RowUpdatePersonId) REFERENCES Application.Person (PersonId);
 GO
 
-ALTER TABLE Application.Address WITH CHECK
-ADD
-    CONSTRAINT Address_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
-GO
+--ALTER TABLE Application.Address WITH CHECK
+--ADD
+--    CONSTRAINT Address_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
+--GO
 
 ALTER TABLE Application.Address WITH CHECK
 ADD
@@ -844,20 +838,20 @@ ADD
     CONSTRAINT PersonEmail_EmailType FOREIGN KEY (EmailTypeId) REFERENCES Application.EmailType (EmailTypeId);
 GO
 
-ALTER TABLE Application.PersonEmail
-ADD
-    CONSTRAINT PersonEmail_EmailTypeId_Unknown DEFAULT ((-1)) FOR EmailTypeId;
-GO
+--ALTER TABLE Application.PersonEmail
+--ADD
+--    CONSTRAINT PersonEmail_EmailTypeId_Unknown DEFAULT ((-1)) FOR EmailTypeId;
+--GO
 
 ALTER TABLE Application.PersonEmail WITH CHECK
 ADD
     CONSTRAINT PersonEmail_RowUpdatePerson FOREIGN KEY (RowUpdatePersonId) REFERENCES Application.Person (PersonId);
 GO
 
-ALTER TABLE Application.PersonEmail WITH CHECK
-ADD
-    CONSTRAINT PersonEmail_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
-GO
+--ALTER TABLE Application.PersonEmail WITH CHECK
+--ADD
+--    CONSTRAINT PersonEmail_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
+--GO
 
 ALTER TABLE Application.PersonEmail WITH CHECK
 ADD
@@ -958,20 +952,20 @@ ADD
     CONSTRAINT Residence_AddressType FOREIGN KEY (AddressTypeId) REFERENCES Application.AddressType (AddressTypeId);
 GO
 
-ALTER TABLE Application.Residence
-ADD
-    CONSTRAINT Residence_AddressTypeId_Unknown DEFAULT ((-1)) FOR AddressTypeId;
-GO
+--ALTER TABLE Application.Residence
+--ADD
+--    CONSTRAINT Residence_AddressTypeId_Unknown DEFAULT ((-1)) FOR AddressTypeId;
+--GO
 
 ALTER TABLE Application.Residence WITH CHECK
 ADD
     CONSTRAINT Residence_RowUpdatePerson FOREIGN KEY (RowUpdatePersonId) REFERENCES Application.Person (PersonId);
 GO
 
-ALTER TABLE Application.Residence WITH CHECK
-ADD
-    CONSTRAINT Residence_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
-GO
+--ALTER TABLE Application.Residence WITH CHECK
+--ADD
+--    CONSTRAINT Residence_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
+--GO
 
 ALTER TABLE Application.Residence WITH CHECK
 ADD
@@ -1057,10 +1051,10 @@ ADD
     CONSTRAINT Organization_RowUpdatePerson FOREIGN KEY (RowUpdatePersonId) REFERENCES Application.Person (PersonId);
 GO
 
-ALTER TABLE Application.Organization WITH CHECK
-ADD
-    CONSTRAINT Organization_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
-GO
+--ALTER TABLE Application.Organization WITH CHECK
+--ADD
+--    CONSTRAINT Organization_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
+--GO
 
 ALTER TABLE Application.Organization WITH CHECK
 ADD
@@ -1079,6 +1073,7 @@ CREATE TABLE Sales.Customer (
     CustomerId                 INT            IDENTITY(1, 1) NOT NULL
    ,OrganizationId             INT            NOT NULL
    ,CreditLimit                DECIMAL(18, 2) NULL
+   ,PaymentDays                INT            NOT NULL
    ,IsOnCreditHoldFlag         BIT            NOT NULL
    ,AccountOpenedDate          DATE           NOT NULL
    ,StandardDiscountPercentage DECIMAL(18, 3) NOT NULL
@@ -1091,6 +1086,10 @@ CREATE TABLE Sales.Customer (
 );
 GO
 
+--TODO: Add CONSTRAINT for PaymentDays
+--TODO: Add CONSTRAINT for CreditLimit
+--TODO: Add CONSTRAINT for StandardDiscountPercentage
+
 ALTER TABLE Sales.Customer WITH CHECK
 ADD
     CONSTRAINT Customer_Organization FOREIGN KEY (OrganizationId) REFERENCES Application.Organization (OrganizationId);
@@ -1101,10 +1100,10 @@ ADD
     CONSTRAINT Customer_Person FOREIGN KEY (RowUpdatePersonId) REFERENCES Application.Person (PersonId);
 GO
 
-ALTER TABLE Sales.Customer WITH CHECK
-ADD
-    CONSTRAINT Customer_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
-GO
+--ALTER TABLE Sales.Customer WITH CHECK
+--ADD
+--    CONSTRAINT Customer_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
+--GO
 
 ALTER TABLE Sales.Customer WITH CHECK
 ADD
@@ -1134,6 +1133,8 @@ CREATE TABLE Purchasing.Supplier (
 );
 GO
 
+--TODO: Add CONSTRAINT for PaymentDays
+
 ALTER TABLE Purchasing.Supplier WITH CHECK
 ADD
     CONSTRAINT Customer_Organization FOREIGN KEY (OrganizationId) REFERENCES Application.Organization (OrganizationId);
@@ -1144,10 +1145,10 @@ ADD
     CONSTRAINT Customer_Person FOREIGN KEY (RowUpdatePersonId) REFERENCES Application.Person (PersonId);
 GO
 
-ALTER TABLE Purchasing.Supplier WITH CHECK
-ADD
-    CONSTRAINT Supplier_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
-GO
+--ALTER TABLE Purchasing.Supplier WITH CHECK
+--ADD
+--    CONSTRAINT Supplier_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
+--GO
 
 ALTER TABLE Purchasing.Supplier WITH CHECK
 ADD
@@ -1200,20 +1201,20 @@ ADD
     CONSTRAINT Location_AddressType FOREIGN KEY (AddressTypeId) REFERENCES Application.AddressType (AddressTypeId);
 GO
 
-ALTER TABLE Application.Location
-ADD
-    CONSTRAINT Location_AddressTypeId_Unknown DEFAULT ((-1)) FOR AddressTypeId;
-GO
+--ALTER TABLE Application.Location
+--ADD
+--    CONSTRAINT Location_AddressTypeId_Unknown DEFAULT ((-1)) FOR AddressTypeId;
+--GO
 
 ALTER TABLE Application.Location WITH CHECK
 ADD
     CONSTRAINT Location_RowUpdatePerson FOREIGN KEY (RowUpdatePersonId) REFERENCES Application.Person (PersonId);
 GO
 
-ALTER TABLE Application.Location WITH CHECK
-ADD
-    CONSTRAINT Location_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
-GO
+--ALTER TABLE Application.Location WITH CHECK
+--ADD
+--    CONSTRAINT Location_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
+--GO
 
 ALTER TABLE Application.Location WITH CHECK
 ADD
@@ -1246,10 +1247,10 @@ ADD
     CONSTRAINT PhoneType_RowUpdatePerson FOREIGN KEY (RowUpdatePersonId) REFERENCES Application.Person (PersonId);
 GO
 
-ALTER TABLE Application.PhoneType WITH CHECK
-ADD
-    CONSTRAINT PhoneType_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
-GO
+--ALTER TABLE Application.PhoneType WITH CHECK
+--ADD
+--    CONSTRAINT PhoneType_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
+--GO
 
 ALTER TABLE Application.PhoneType WITH CHECK
 ADD
@@ -1261,12 +1262,11 @@ ADD
     CONSTRAINT PhoneType_RowCreateTime_Default DEFAULT (SYSDATETIME()) FOR RowCreateTime;
 GO
 
-INSERT INTO Application.PhoneType (PhoneTypeId, PhoneTypeName)
+INSERT INTO Application.PhoneType (PhoneTypeId, PhoneTypeName, RowUpdatePersonId)
 VALUES
-     (-1, N'Default')
-    ,(1, N'Mobile')
-    ,(2, N'Home')
-    ,(3, N'Work');
+     (1, N'Mobile', 1)
+    ,(2, N'Home', 1)
+    ,(3, N'Work', 1);
 
 /**********************************************************************************************************************
 ** Create PersonPhone
@@ -1298,20 +1298,20 @@ ADD
     CONSTRAINT PersonPhone_PhoneType FOREIGN KEY (PhoneTypeId) REFERENCES Application.PhoneType (PhoneTypeId);
 GO
 
-ALTER TABLE Application.PersonPhone
-ADD
-    CONSTRAINT PersonPhone_PhoneTypeId_Unknown DEFAULT ((-1)) FOR PhoneTypeId;
-GO
+--ALTER TABLE Application.PersonPhone
+--ADD
+--    CONSTRAINT PersonPhone_PhoneTypeId_Unknown DEFAULT ((-1)) FOR PhoneTypeId;
+--GO
 
 ALTER TABLE Application.PersonPhone WITH CHECK
 ADD
     CONSTRAINT PersonPhone_RowUpdatePerson FOREIGN KEY (RowUpdatePersonId) REFERENCES Application.Person (PersonId);
 GO
 
-ALTER TABLE Application.PersonPhone WITH CHECK
-ADD
-    CONSTRAINT PersonPhone_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
-GO
+--ALTER TABLE Application.PersonPhone WITH CHECK
+--ADD
+--    CONSTRAINT PersonPhone_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
+--GO
 
 ALTER TABLE Application.PersonPhone WITH CHECK
 ADD
@@ -1353,20 +1353,20 @@ ADD
     CONSTRAINT LocationPhone_PhoneType FOREIGN KEY (PhoneTypeId) REFERENCES Application.PhoneType (PhoneTypeId);
 GO
 
-ALTER TABLE Application.LocationPhone
-ADD
-    CONSTRAINT LocationPhone_PhoneTypeId_Unknown DEFAULT ((-1)) FOR PhoneTypeId;
-GO
+--ALTER TABLE Application.LocationPhone
+--ADD
+--    CONSTRAINT LocationPhone_PhoneTypeId_Unknown DEFAULT ((-1)) FOR PhoneTypeId;
+--GO
 
 ALTER TABLE Application.LocationPhone WITH CHECK
 ADD
     CONSTRAINT LocationPhone_RowUpdatePerson FOREIGN KEY (RowUpdatePersonId) REFERENCES Application.Person (PersonId);
 GO
 
-ALTER TABLE Application.LocationPhone WITH CHECK
-ADD
-    CONSTRAINT LocationPhoneRowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
-GO
+--ALTER TABLE Application.LocationPhone WITH CHECK
+--ADD
+--    CONSTRAINT LocationPhoneRowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
+--GO
 
 ALTER TABLE Application.LocationPhone WITH CHECK
 ADD
@@ -1399,10 +1399,10 @@ ADD
     CONSTRAINT DeliveryType_RowUpdatePerson FOREIGN KEY (RowUpdatePersonId) REFERENCES Application.Person (PersonId);
 GO
 
-ALTER TABLE Application.DeliveryType WITH CHECK
-ADD
-    CONSTRAINT DeliveryType_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
-GO
+--ALTER TABLE Application.DeliveryType WITH CHECK
+--ADD
+--    CONSTRAINT DeliveryType_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
+--GO
 
 ALTER TABLE Application.DeliveryType WITH CHECK
 ADD
@@ -1414,17 +1414,16 @@ ADD
     CONSTRAINT DeliveryType_RowCreateTime_Default DEFAULT (SYSDATETIME()) FOR RowCreateTime;
 GO
 
-INSERT INTO Application.DeliveryType (DeliveryTypeId, DeliveryTypeName)
+INSERT INTO Application.DeliveryType (DeliveryTypeId, DeliveryTypeName, RowUpdatePersonId)
 VALUES
-     (-1, N'Default')
-    ,(1, N'Post')
-    ,(2, N'Courier')
-    ,(3, N'Delivery Van')
-    ,(4, N'Customer Collect')
-    ,(5, N'Chilled Van')
-    ,(6, N'Customer Courier to Collect')
-    ,(7, N'Road Freight')
-    ,(8, N'Air Freight');
+     (1, N'Post', 1)
+    ,(2, N'Courier', 1)
+    ,(3, N'Delivery Van', 1)
+    ,(4, N'Customer Collect', 1)
+    ,(5, N'Chilled Van', 1)
+    ,(6, N'Customer Courier to Collect', 1)
+    ,(7, N'Road Freight', 1)
+    ,(8, N'Air Freight', 1);
 
 /**********************************************************************************************************************
 ** Create PurchaseOrder
@@ -1449,19 +1448,18 @@ CREATE TABLE Purchasing.PurchaseOrder (
    ,INDEX PurchaseOrder_RowUpdatePerson NONCLUSTERED (RowUpdatePersonId ASC)
    ,INDEX PurchaseOrder_DeliveryTypeId NONCLUSTERED (DeliveryTypeId ASC)
    ,INDEX PurchaseOrder_ContactPersonId NONCLUSTERED (ContactPersonId ASC)
-   
 );
 GO
 
-ALTER TABLE Purchasing.PurchaseOrder WITH CHECK
-ADD
-    CONSTRAINT PurchaseOrder_ContactPersonId_Default DEFAULT ((-1)) FOR ContactPersonId;
-GO
+--ALTER TABLE Purchasing.PurchaseOrder WITH CHECK
+--ADD
+--    CONSTRAINT PurchaseOrder_ContactPersonId_Default DEFAULT ((-1)) FOR ContactPersonId;
+--GO
 
-ALTER TABLE Purchasing.PurchaseOrder WITH CHECK
-ADD
-    CONSTRAINT PurchaseOrder_DeliveryTypeId_Default DEFAULT ((-1)) FOR DeliveryTypeId;
-GO
+--ALTER TABLE Purchasing.PurchaseOrder WITH CHECK
+--ADD
+--    CONSTRAINT PurchaseOrder_DeliveryTypeId_Default DEFAULT ((-1)) FOR DeliveryTypeId;
+--GO
 
 ALTER TABLE Purchasing.PurchaseOrder WITH CHECK
 ADD
@@ -1473,10 +1471,10 @@ ADD
     CONSTRAINT PurchaseOrder_RowUpdatePerson FOREIGN KEY (RowUpdatePersonId) REFERENCES Application.Person (PersonId);
 GO
 
-ALTER TABLE Purchasing.PurchaseOrder WITH CHECK
-ADD
-    CONSTRAINT PurchaseOrder_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
-GO
+--ALTER TABLE Purchasing.PurchaseOrder WITH CHECK
+--ADD
+--    CONSTRAINT PurchaseOrder_RowUpdatePersonId_Default DEFAULT ((-1)) FOR RowUpdatePersonId;
+--GO
 
 ALTER TABLE Purchasing.PurchaseOrder WITH CHECK
 ADD
@@ -1622,4 +1620,4 @@ EXEC sys.sp_addextendedproperty
    ,@level1name = N'PurchaseOrder';
 GO
 
-LEFT OFF WITH PurchaseOrderLines
+--LEFT OFF WITH PurchaseOrderLines
