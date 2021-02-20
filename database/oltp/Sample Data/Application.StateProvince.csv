@@ -1,0 +1,99 @@
+﻿StateProvinceId,CountryRegionId,StateProvinceCode,StateProvinceName
+57,40,AB,Alberta
+59,40,BC,British Columbia
+60,40,MB,Manitoba
+61,40,NB,New Brunswick
+62,40,NL,Newfoundland and Labrador
+64,40,NS,Nova Scotia
+63,40,NT,Northwest Territories
+65,40,NU,Nunavut
+66,40,ON,Ontario
+67,40,PE,Prince Edward Island
+68,40,QC,Quebec
+69,40,SK,Saskatchewan
+70,40,YT,Yukon
+71,138,AG,Aguascalientes
+72,138,BC,Baja California
+73,138,BS,Baja California Sur
+74,138,CH,Chihuahua
+75,138,CL,Colima
+76,138,CM,Campeche
+77,138,CO,Coahuila
+78,138,CS,Chiapas
+79,138,DF,Federal District
+80,138,DG,Durango
+81,138,GR,Guerrero
+82,138,GT,Guanajuato
+83,138,HG,Hidalgo
+84,138,JA,Jalisco
+85,138,ME,México State
+86,138,MI,Michoacán
+87,138,MO,Morelos
+88,138,NA,Nayarit
+89,138,NL,Nuevo León
+90,138,OA,Oaxaca
+91,138,PB,Puebla
+92,138,QE,Querétaro
+93,138,QR,Quintana Roo
+94,138,SI,Sinaloa
+95,138,SL,San Luis Potosí
+96,138,SO,Sonora
+97,138,TB,Tabasco
+98,138,TL,Tlaxcala
+99,138,TM,Tamaulipas
+100,138,VE,Veracruz
+101,138,YU,Yucatán
+102,138,ZA,Zacatecas
+2,230,AK,Alaska
+1,230,AL,Alabama
+4,230,AR,Arkansas
+3,230,AZ,Arizona
+5,230,CA,California
+6,230,CO,Colorado
+7,230,CT,Connecticut
+9,230,DC,District of Columbia
+8,230,DE,Delaware
+10,230,FL,Florida
+11,230,GA,Georgia
+12,230,HI,Hawaii
+16,230,IA,Iowa
+13,230,ID,Idaho
+14,230,IL,Illinois
+15,230,IN,Indiana
+17,230,KS,Kansas
+18,230,KY,Kentucky
+19,230,LA,Louisiana
+22,230,MA,Massachusetts
+21,230,MD,Maryland
+20,230,ME,Maine
+23,230,MI,Michigan
+24,230,MN,Minnesota
+26,230,MO,Missouri
+25,230,MS,Mississippi
+27,230,MT,Montana
+34,230,NC,North Carolina
+35,230,ND,North Dakota
+28,230,NE,Nebraska
+30,230,NH,New Hampshire
+31,230,NJ,New Jersey
+32,230,NM,New Mexico
+29,230,NV,Nevada
+33,230,NY,New York
+36,230,OH,Ohio
+37,230,OK,Oklahoma
+38,230,OR,Oregon
+39,230,PA,Pennsylvania
+40,230,PR,Puerto Rico (US Territory)
+41,230,RI,Rhode Island
+42,230,SC,South Carolina
+43,230,SD,South Dakota
+44,230,TN,Tennessee
+45,230,TX,Texas
+46,230,UT,Utah
+49,230,VA,Virginia
+48,230,VI,Virgin Islands (US Territory)
+47,230,VT,Vermont
+50,230,WA,Washington
+52,230,WI,Wisconsin
+51,230,WV,West Virginia
+53,230,WY,Wyoming
