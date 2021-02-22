@@ -15,10 +15,10 @@ USE KevinMartinTech;
 
 DROP TABLE IF EXISTS Purchasing.PurchaseOrderLine;
 DROP TABLE IF EXISTS Purchasing.PurchaseOrder;
+DROP TABLE IF EXISTS Application.ProductCategory;
 DROP TABLE IF EXISTS Application.ProductVariant;
 DROP TABLE IF EXISTS Application.Product;
-DROP TABLE IF EXISTS Application.ProductCategory;
-
+DROP TABLE IF EXISTS Application.Category;
 DROP TABLE IF EXISTS Application.AttributeTerm;
 DROP TABLE IF EXISTS Application.Attribute;
 DROP TABLE IF EXISTS Application.LocationPhone;
@@ -907,20 +907,20 @@ CREATE TABLE Application.DeliveryType (
 GO
 
 /**********************************************************************************************************************
-** Create ProductCategory
+** Create Category
 **********************************************************************************************************************/
 
-CREATE TABLE Application.ProductCategory (
-    ProductCategoryId         INT               NOT NULL
-   ,ParentIdProductCategoryId INT               NULL CONSTRAINT Application_ProductCategory_ParentIdProductCategoryId FOREIGN KEY REFERENCES Application.ProductCategory (ProductCategoryId)
-   ,ProductCategoryName       NVARCHAR(200)     NOT NULL
-   ,ProductCategorySlug       NVARCHAR(400)     NOT NULL
-   ,RowUpdatePersonId         INT               NOT NULL CONSTRAINT Application_ProductCategory_Application_RowUpdatePerson FOREIGN KEY (RowUpdatePersonId) REFERENCES Application.Person (PersonId)
-   ,RowUpdateTime             DATETIMEOFFSET(7) NOT NULL CONSTRAINT Application_ProductCategory_RowUpdateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime             DATETIMEOFFSET(7) NOT NULL CONSTRAINT Application_ProductCategory_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,CONSTRAINT Application_ProductCategory_ProductCategoryId PRIMARY KEY CLUSTERED (ProductCategoryId ASC)
-   ,CONSTRAINT Application_ProductCategory_ProductCategorySlug UNIQUE NONCLUSTERED (ProductCategorySlug ASC)
-   ,INDEX Application_ProductCategory_RowUpdatePersonId NONCLUSTERED (RowUpdatePersonId ASC)
+CREATE TABLE Application.Category (
+    CategoryId         INT               NOT NULL IDENTITY(1, 1)
+   ,ParentIdCategoryId INT               NULL CONSTRAINT Application_Category_ParentIdCategoryId FOREIGN KEY REFERENCES Application.Category (CategoryId)
+   ,CategoryName       NVARCHAR(200)     NOT NULL
+   ,CategorySlug       NVARCHAR(400)     NOT NULL
+   ,RowUpdatePersonId  INT               NOT NULL CONSTRAINT Application_Category_Application_RowUpdatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,RowUpdateTime      DATETIMEOFFSET(7) NOT NULL CONSTRAINT Application_Category_RowUpdateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,RowCreateTime      DATETIMEOFFSET(7) NOT NULL CONSTRAINT Application_Category_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CONSTRAINT Application_Category_CategoryId PRIMARY KEY CLUSTERED (CategoryId ASC)
+   ,CONSTRAINT Application_Category_CategorySlug UNIQUE NONCLUSTERED (CategorySlug ASC)
+   ,INDEX Application_Category_RowUpdatePersonId NONCLUSTERED (RowUpdatePersonId ASC)
 );
 GO
 
@@ -932,7 +932,7 @@ CREATE TABLE Application.Product (
     ProductId          INT               NOT NULL
    ,ProductName        NVARCHAR(200)     NOT NULL
    ,ProductSlug        NVARCHAR(400)     NOT NULL
-   ,ImageLocation      NVARCHAR(2000)    NULL
+   ,ImageJSON          NVARCHAR(MAX)     NULL
    ,ProductDescription NVARCHAR(MAX)     NULL
    ,RowUpdatePersonId  INT               NOT NULL CONSTRAINT Application_Product_Application_RowUpdatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
    ,RowUpdateTime      DATETIMEOFFSET(7) NOT NULL CONSTRAINT Application_Product_RowUpdateTime_Default DEFAULT (SYSDATETIMEOFFSET())
@@ -941,6 +941,22 @@ CREATE TABLE Application.Product (
    ,CONSTRAINT Application_Product_ProductName UNIQUE NONCLUSTERED (ProductName ASC)
    ,CONSTRAINT Application_Product_ProductSlug UNIQUE NONCLUSTERED (ProductSlug ASC)
    ,INDEX Application_Product_RowUpdatePersonId NONCLUSTERED (RowUpdatePersonId ASC)
+);
+GO
+
+/**********************************************************************************************************************
+** Create ProductCategory
+**********************************************************************************************************************/
+
+CREATE TABLE Application.ProductCategory (
+    ProductCategoryId INT               NOT NULL IDENTITY(1, 1)
+   ,ProductId         INT               NOT NULL CONSTRAINT Application_ProductCategory_Application_Product FOREIGN KEY REFERENCES Application.Product (ProductId)
+   ,CategoryId        INT               NOT NULL CONSTRAINT Application_ProductCategory_Application_Category FOREIGN KEY REFERENCES Application.Category (CategoryId)
+   ,RowUpdatePersonId INT               NOT NULL CONSTRAINT Application_ProductCategory_Application_RowUpdatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,RowUpdateTime     DATETIMEOFFSET(7) NOT NULL CONSTRAINT Application_ProductCategory_RowUpdateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,RowCreateTime     DATETIMEOFFSET(7) NOT NULL CONSTRAINT Application_ProductCategory_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CONSTRAINT Application_ProductCategory_CategoryId PRIMARY KEY CLUSTERED (CategoryId ASC)
+   ,INDEX Application_ProductCategory_RowUpdatePersonId NONCLUSTERED (RowUpdatePersonId ASC)
 );
 GO
 
@@ -967,7 +983,7 @@ CREATE TABLE Application.AttributeTerm (
     AttributeTermId   INT               NOT NULL
    ,AttributeId       INT               NOT NULL CONSTRAINT Application_AttributeTerm_Application_Attribute FOREIGN KEY REFERENCES Application.Attribute (AttributeId)
    ,TermName          NVARCHAR(100)     NOT NULL
-   ,RowUpdatePersonId INT               NOT NULL CONSTRAINT Application_AttributeTerm_Application_RowUpdatePerson FOREIGN KEY (RowUpdatePersonId) REFERENCES Application.Person (PersonId)
+   ,RowUpdatePersonId INT               NOT NULL CONSTRAINT Application_AttributeTerm_Application_RowUpdatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
    ,RowUpdateTime     DATETIMEOFFSET(7) NOT NULL CONSTRAINT Application_AttributeTerm_RowUpdateTime_Default DEFAULT (SYSDATETIMEOFFSET())
    ,RowCreateTime     DATETIMEOFFSET(7) NOT NULL CONSTRAINT Application_AttributeTerm_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
    ,CONSTRAINT Application_AttributeTerm_AttributeTermId PRIMARY KEY CLUSTERED (AttributeTermId ASC)
@@ -991,7 +1007,6 @@ CREATE TABLE Application.ProductVariant (
    ,RegularPrice      DECIMAL(18, 2)    NOT NULL
    ,SalePrice         DECIMAL(18, 2)    NULL
    ,SKU               NVARCHAR(50)      NULL
-   ,ImageLocation     NVARCHAR(2000)    NULL
    ,RowUpdatePersonId INT               NOT NULL CONSTRAINT Application_ProductVariant_Application_RowUpdatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
    ,RowUpdateTime     DATETIMEOFFSET(7) NOT NULL CONSTRAINT Application_ProductVariant_RowUpdateTime_Default DEFAULT (SYSDATETIMEOFFSET())
    ,RowCreateTime     DATETIMEOFFSET(7) NOT NULL CONSTRAINT Application_ProductVariant_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
