@@ -1,1 +1,0 @@
-UPDATE Application.Organization SET WebsiteURL = NULL WHERE WebsiteURL = ''
