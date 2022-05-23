@@ -37,7 +37,7 @@ SET
 --   ,P.NormalizedEmailAddress = UPPER(REPLACE(TRANSLATE(CONCAT(P.FirstName, P.LastName), N'爱安納彩红靜義凯文王李張劉陳楊~`!@#$%^&*()-_=+[{]}\|:;"/?.,>< ''', '???????????????@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@'), '@', '') + '@' + O.Domain)
 FROM
     Application.Person                              AS P
-    INNER JOIN KevinMartinTechData.dbo.Organization AS O ON P.PersonId = O.Id
+    INNER JOIN KevinMartinTechData.dbo.Organization AS O ON P.PersonId = O.OrganizationId
 WHERE
     P.EmailAddress IS NOT NULL;
 
@@ -52,7 +52,7 @@ SET
 FROM
     Application.OrganizationPerson                  AS OP
     INNER JOIN Application.Person                   AS P ON OP.PersonId       = P.PersonId
-    INNER JOIN KevinMartinTechData.dbo.Organization AS O ON OP.OrganizationId = O.Id
+    INNER JOIN KevinMartinTechData.dbo.Organization AS O ON OP.OrganizationId = O.OrganizationId
 WHERE
 	P.EmailAddress IS NOT NULL;
 
