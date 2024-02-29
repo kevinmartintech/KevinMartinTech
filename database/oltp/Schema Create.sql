@@ -14,7 +14,7 @@ CREATE DATABASE KevinMartinTech;
 GO
 */
 
-USE KevinMartinTech;
+--USE KevinMartinTech;
 
 /**********************************************************************************************************************
 ** Drop stored procedures except sp_CRUDGen
@@ -25,9 +25,8 @@ DECLARE @NewLineString nvarchar(MAX) = CAST(CHAR(13) + CHAR(10) AS nvarchar(MAX)
 SELECT
     @SQLStatement = @SQLStatement + COALESCE(N'DROP PROCEDURE ' + S.name + N'.' + P.name + N';', N'') + @NewLineString
 FROM
-    sys.procedures         AS P
-    INNER JOIN sys.schemas AS S
-        ON P.schema_id = S.schema_id
+    sys.procedures     AS P
+INNER JOIN sys.schemas AS S ON P.schema_id = S.schema_id
 WHERE
     P.name NOT IN ('sp_CRUDGen', 'sp_Develop');
 
@@ -36,7 +35,12 @@ EXECUTE sys.sp_executesql @SQLStatement;
 SET @SQLStatement = N'';
 
 /**********************************************************************************************************************
-** Drop tables
+** Drop Functions
+**********************************************************************************************************************/
+DROP FUNCTION IF EXISTS dbo.RemoveCharactersFromString;
+
+/**********************************************************************************************************************
+** Drop Tables
 **********************************************************************************************************************/
 DROP TABLE IF EXISTS Application.OrganizationPerson;
 DROP TABLE IF EXISTS Application.OrganizationPhone;
@@ -73,7 +77,14 @@ DROP TABLE IF EXISTS Application.SecurityRole;
 DROP TABLE IF EXISTS Application.Phone;
 DROP TABLE IF EXISTS Application.Location;
 DROP TABLE IF EXISTS Application.Residence;
+
+IF OBJECTPROPERTY(OBJECT_ID('Application.Address'), 'TableTemporalType') = 2
+    BEGIN
+        ALTER TABLE Application.Address SET (SYSTEM_VERSIONING = OFF);
+    END;
 DROP TABLE IF EXISTS Application.Address;
+DROP TABLE IF EXISTS History.Address;
+
 DROP TABLE IF EXISTS Application.AddressType;
 DROP TABLE IF EXISTS Application.EmailType;
 DROP TABLE IF EXISTS Application.DeliveryType;
@@ -86,12 +97,28 @@ DROP TABLE IF EXISTS Application.CountryRegion;
 DROP TABLE IF EXISTS Sales.Customer;
 DROP TABLE IF EXISTS Purchasing.Supplier;
 
+IF OBJECTPROPERTY(OBJECT_ID('Application.Organization'), 'TableTemporalType') = 2
+    BEGIN
+        ALTER TABLE Application.Organization SET (SYSTEM_VERSIONING = OFF);
+    END;
+
 DROP TABLE IF EXISTS Application.Organization;
+DROP TABLE IF EXISTS History.Organization;
+
+
+IF OBJECTPROPERTY(OBJECT_ID('Application.Person'), 'TableTemporalType') = 2
+    BEGIN
+        ALTER TABLE Application.Person SET (SYSTEM_VERSIONING = OFF);
+    END;
+
 DROP TABLE IF EXISTS Application.Person;
+DROP TABLE IF EXISTS History.Person;
+
 
 DROP SCHEMA IF EXISTS Application;
 DROP SCHEMA IF EXISTS Sales;
 DROP SCHEMA IF EXISTS Purchasing;
+DROP SCHEMA IF EXISTS History;
 GO
 
 /**********************************************************************************************************************
@@ -103,6 +130,8 @@ GO
 CREATE SCHEMA Sales AUTHORIZATION dbo;
 GO
 CREATE SCHEMA Purchasing AUTHORIZATION dbo;
+GO
+CREATE SCHEMA History AUTHORIZATION dbo;
 GO
 
 /**********************************************************************************************************************
@@ -117,39 +146,40 @@ GO
 **********************************************************************************************************************/
 
 CREATE TABLE Application.Person (
-    PersonId                    int               NOT NULL IDENTITY(1, 1)
-   ,AzureAdUserId               nvarchar(256)     NULL /* Could associate an Azure Active Directory user id for authentication to a person row. */
-   ,UserName                    nvarchar(256)     NULL
-   ,NormalizedUserName          AS (UPPER(ISNULL(UserName, ''))) PERSISTED NOT NULL
-   ,EmailAddress                nvarchar(256)     NULL
-   ,NormalizedEmailAddress      AS (UPPER(ISNULL(EmailAddress, ''))) PERSISTED NOT NULL
-   ,IsEmailAddressConfirmedFlag bit               NOT NULL CONSTRAINT Application_Person_IsEmailAddressConfirmedFlag_Default DEFAULT ((0))
-   ,PasswordHash                nvarchar(500)     NULL
-   ,SecurityStamp               nvarchar(500)     NULL
-   ,ConcurrencyStamp            nvarchar(500)     NULL
-   ,PhoneNumber                 nvarchar(100)     NULL
-   ,IsPhoneNumberConfirmedFlag  bit               NOT NULL CONSTRAINT Application_Person_IsPhoneNumberConfirmedFlag_Default DEFAULT ((0))
-   ,IsTwoFactorEnabledFlag      bit               NOT NULL CONSTRAINT Application_Person_IsTwoFactorEnabledFlag_Default DEFAULT ((0))
-   ,LockoutEndTime              datetimeoffset(7) NULL
-   ,IsLockoutEnabledFlag        bit               NOT NULL CONSTRAINT Application_Person_IsLockoutEnabledFlag_Default DEFAULT ((0))
-   ,AccessFailedCount           int               NOT NULL CONSTRAINT Application_Person_AccessFailedCount_Default DEFAULT ((0))
-   ,Title                       nvarchar(10)      NULL
-   ,FirstName                   nvarchar(100)     NULL
-   ,LastName                    nvarchar(100)     NULL
-   ,Suffix                      nvarchar(10)      NULL
-   ,NickName                    nvarchar(100)     NULL
-   ,SearchName                  AS (TRIM(CONCAT(ISNULL(TRIM(NickName) + ' ', ''), ISNULL(TRIM(FirstName) + ' ', ''), ISNULL(TRIM(LastName) + ' ', ''), ISNULL(TRIM(Suffix) + '', '')))) PERSISTED NOT NULL
-   ,IsOptOutFlag                bit               NULL
-   ,RowModifyPersonId           int               NOT NULL CONSTRAINT Application_Person_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId           int               NOT NULL CONSTRAINT Application_Person_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime               datetimeoffset(7) NOT NULL CONSTRAINT Application_Person_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime               datetimeoffset(7) NOT NULL CONSTRAINT Application_Person_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp             rowversion        NOT NULL
+    PersonId                int               NOT NULL IDENTITY(1, 1)
+   ,AzureAdUserId           uniqueidentifier  NULL /* Could associate an Azure Active Directory user id for authentication to a person row. */
+   ,UserName                nvarchar(256)     NULL
+   ,EmailAddress            nvarchar(254)     NULL
+   ,IsEmailAddressConfirmed bit               NOT NULL CONSTRAINT Application_Person_IsEmailAddressConfirmed_Default DEFAULT ((0))
+   ,PasswordHash            nvarchar(500)     NULL
+   ,PhoneNumber             nvarchar(100)     NULL
+   ,IsPhoneNumberConfirmed  bit               NOT NULL CONSTRAINT Application_Person_IsPhoneNumberConfirmed_Default DEFAULT ((0))
+   ,IsTwoFactorEnabled      bit               NOT NULL CONSTRAINT Application_Person_IsTwoFactorEnabled_Default DEFAULT ((0))
+   ,LockoutEndTime          datetimeoffset(7) NULL
+   ,IsLockoutEnabled        bit               NOT NULL CONSTRAINT Application_Person_IsLockoutEnabled_Default DEFAULT ((0))
+   ,AccessFailedCount       int               NOT NULL CONSTRAINT Application_Person_AccessFailedCount_Default DEFAULT ((0))
+   ,Title                   nvarchar(10)      NULL
+   ,FirstName               nvarchar(100)     NULL
+   ,LastName                nvarchar(100)     NULL
+   ,Suffix                  nvarchar(10)      NULL
+   ,NickName                nvarchar(100)     NULL
+   ,SearchName              AS (TRIM(CONCAT(ISNULL(TRIM(NickName) + ' ', ''), ISNULL(TRIM(FirstName) + ' ', ''), ISNULL(TRIM(LastName) + ' ', ''), ISNULL(TRIM(Suffix) + '', '')))) PERSISTED NOT NULL
+   ,IsOptOut                bit               NOT NULL CONSTRAINT Application_Person_IsOptOut_Default DEFAULT ((0))
+   ,ModifyPersonId          int               NOT NULL CONSTRAINT Application_Person_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId          int               NOT NULL CONSTRAINT Application_Person_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime              datetimeoffset(7) NOT NULL CONSTRAINT Application_Person_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime              datetimeoffset(7) NOT NULL CONSTRAINT Application_Person_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp            rowversion        NOT NULL
+   ,ValidFromTime           datetime2(7)      GENERATED ALWAYS AS ROW START NOT NULL CONSTRAINT Person_ValidFromTime_Default DEFAULT (SYSUTCDATETIME())
+   ,ValidToTime             datetime2(7)      GENERATED ALWAYS AS ROW END NOT NULL CONSTRAINT Person_ValidToTime_Default DEFAULT ('9999-12-31 23:59:59.9999999')
    ,CONSTRAINT Application_Person_PersonId PRIMARY KEY CLUSTERED (PersonId ASC)
-   ,INDEX Application_Person_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_Person_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_Person_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_Person_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
    ,INDEX Application_Person_SearchName NONCLUSTERED (SearchName ASC)
-);
+   ,INDEX Application_Person_LastName NONCLUSTERED (LastName ASC)
+   ,PERIOD FOR SYSTEM_TIME(ValidFromTime, ValidToTime)
+)
+WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = History.Person));
 GO
 
 EXEC sys.sp_addextendedproperty
@@ -227,7 +257,7 @@ EXEC sys.sp_addextendedproperty
    ,@level1type = N'TABLE'
    ,@level1name = N'Person'
    ,@level2type = N'COLUMN'
-   ,@level2name = N'IsOptOutFlag';
+   ,@level2name = N'IsOptOut';
 GO
 
 
@@ -318,21 +348,21 @@ GO
 ** Create LanguageCode
 **********************************************************************************************************************/
 CREATE TABLE Application.LanguageCode (
-    LanguageCodeId    int               IDENTITY(1, 1) NOT NULL
-   ,LanguageName      nvarchar(100)     NOT NULL
-   ,IsoAlpha2Code     varchar(2)        NOT NULL
-   ,IsoAlpha3Code     varchar(3)        NOT NULL
-   ,RowModifyPersonId int               NOT NULL CONSTRAINT Application_LanguageCode_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId int               NOT NULL CONSTRAINT Application_LanguageCode_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_LanguageCode_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_LanguageCode_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp   rowversion        NOT NULL
+    LanguageCodeId int               IDENTITY(1, 1) NOT NULL
+   ,LanguageName   nvarchar(100)     NOT NULL
+   ,IsoAlpha2Code  varchar(2)        NOT NULL
+   ,IsoAlpha3Code  varchar(3)        NOT NULL
+   ,ModifyPersonId int               NOT NULL CONSTRAINT Application_LanguageCode_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId int               NOT NULL CONSTRAINT Application_LanguageCode_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_LanguageCode_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_LanguageCode_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp   rowversion        NOT NULL
    ,CONSTRAINT Application_LanguageCode_LanguageCodeId PRIMARY KEY CLUSTERED (LanguageCodeId ASC)
    ,INDEX Application_LanguageCode_LanguageName UNIQUE NONCLUSTERED (LanguageName ASC)
    ,INDEX Application_LanguageCode_IsoAlpha2Code UNIQUE NONCLUSTERED (IsoAlpha2Code ASC)
    ,INDEX Application_LanguageCode_IsoAlpha3Code UNIQUE NONCLUSTERED (IsoAlpha3Code ASC)
-   ,INDEX Application_LanguageCode_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_LanguageCode_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_LanguageCode_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_LanguageCode_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 
 /**********************************************************************************************************************
@@ -340,24 +370,24 @@ CREATE TABLE Application.LanguageCode (
 **********************************************************************************************************************/
 
 CREATE TABLE Application.CountryRegion (
-    CountryRegionId   int               NOT NULL IDENTITY(1, 1)
-   ,CountryName       nvarchar(60)      NOT NULL
-   ,FormalName        nvarchar(60)      NOT NULL
-   ,IsoAlpha3Code     nvarchar(3)       NULL
-   ,IsoNumericCode    int               NULL
-   ,CountryType       nvarchar(20)      NULL
-   ,Continent         nvarchar(30)      NOT NULL
-   ,Region            nvarchar(30)      NOT NULL
-   ,Subregion         nvarchar(30)      NOT NULL
-   ,RowModifyPersonId int               NOT NULL CONSTRAINT Application_CountryRegion_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId int               NOT NULL CONSTRAINT Application_CountryRegion_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_CountryRegion_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_CountryRegion_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp   rowversion        NOT NULL
+    CountryRegionId int               NOT NULL IDENTITY(1, 1)
+   ,CountryName     nvarchar(60)      NOT NULL
+   ,FormalName      nvarchar(60)      NOT NULL
+   ,IsoAlpha3Code   nvarchar(3)       NULL
+   ,IsoNumericCode  int               NULL
+   ,CountryType     nvarchar(20)      NULL
+   ,Continent       nvarchar(30)      NOT NULL
+   ,Region          nvarchar(30)      NOT NULL
+   ,Subregion       nvarchar(30)      NOT NULL
+   ,ModifyPersonId  int               NOT NULL CONSTRAINT Application_CountryRegion_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId  int               NOT NULL CONSTRAINT Application_CountryRegion_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime      datetimeoffset(7) NOT NULL CONSTRAINT Application_CountryRegion_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime      datetimeoffset(7) NOT NULL CONSTRAINT Application_CountryRegion_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp    rowversion        NOT NULL
    ,CONSTRAINT Application_CountryRegion_CountryRegionId PRIMARY KEY CLUSTERED (CountryRegionId ASC)
    ,INDEX Application_CountryRegion_CountryName UNIQUE NONCLUSTERED (CountryName ASC)
-   ,INDEX Application_CountryRegion_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_CountryRegion_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_CountryRegion_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_CountryRegion_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -478,15 +508,15 @@ CREATE TABLE Application.StateProvince (
    ,CountryRegionId   int               NOT NULL CONSTRAINT Application_StateProvince_Application_CountryRegion FOREIGN KEY REFERENCES Application.CountryRegion (CountryRegionId)
    ,StateProvinceCode nvarchar(5)       NULL
    ,StateProvinceName nvarchar(50)      NOT NULL
-   ,RowModifyPersonId int               NOT NULL CONSTRAINT Application_StateProvince_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId int               NOT NULL CONSTRAINT Application_StateProvince_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_StateProvince_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_StateProvince_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp   rowversion        NOT NULL
+   ,ModifyPersonId    int               NOT NULL CONSTRAINT Application_StateProvince_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId    int               NOT NULL CONSTRAINT Application_StateProvince_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime        datetimeoffset(7) NOT NULL CONSTRAINT Application_StateProvince_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime        datetimeoffset(7) NOT NULL CONSTRAINT Application_StateProvince_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp      rowversion        NOT NULL
    ,CONSTRAINT Application_StateProvince_StateProvinceId PRIMARY KEY CLUSTERED (StateProvinceId ASC)
    ,INDEX Application_StateProvince_CountryRegionId_StateProvinceCode_StateProvinceName UNIQUE NONCLUSTERED (CountryRegionId ASC, StateProvinceCode ASC, StateProvinceName ASC)
-   ,INDEX Application_StateProvince_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_StateProvince_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_StateProvince_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_StateProvince_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -548,18 +578,18 @@ GO
 **********************************************************************************************************************/
 
 CREATE TABLE Application.CityTown (
-    CityTownId        int               NOT NULL IDENTITY(1, 1)
-   ,StateProvinceId   int               NOT NULL CONSTRAINT Application_CityTown_Application_StateProvince FOREIGN KEY REFERENCES Application.StateProvince (StateProvinceId)
-   ,CityTownName      nvarchar(85)      NOT NULL
-   ,RowModifyPersonId int               NOT NULL CONSTRAINT Application_CityTown_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId int               NOT NULL CONSTRAINT Application_CityTown_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_CityTown_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_CityTown_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp   rowversion        NOT NULL
+    CityTownId      int               NOT NULL IDENTITY(1, 1)
+   ,StateProvinceId int               NOT NULL CONSTRAINT Application_CityTown_Application_StateProvince FOREIGN KEY REFERENCES Application.StateProvince (StateProvinceId)
+   ,CityTownName    nvarchar(85)      NOT NULL
+   ,ModifyPersonId  int               NOT NULL CONSTRAINT Application_CityTown_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId  int               NOT NULL CONSTRAINT Application_CityTown_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime      datetimeoffset(7) NOT NULL CONSTRAINT Application_CityTown_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime      datetimeoffset(7) NOT NULL CONSTRAINT Application_CityTown_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp    rowversion        NOT NULL
    ,CONSTRAINT Application_CityTown_CityTownId PRIMARY KEY CLUSTERED (CityTownId ASC)
-   ,INDEX Application_CityTown_StateProvinceId_CityName UNIQUE NONCLUSTERED (StateProvinceId ASC, CityTownName ASC)
-   ,INDEX Application_CityTown_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_CityTown_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_CityTown_StateProvinceId_CityTownName UNIQUE NONCLUSTERED (StateProvinceId ASC, CityTownName ASC)
+   ,INDEX Application_CityTown_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_CityTown_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -611,23 +641,24 @@ GO
 **********************************************************************************************************************/
 
 CREATE TABLE Application.AddressType (
-    AddressTypeId          tinyint           NOT NULL IDENTITY(1, 1)
-   ,AddressTypeName        nvarchar(50)      NOT NULL
+    AddressTypeId          int               NOT NULL IDENTITY(1, 1)
+   --TODO: Should this be AddressTypeCode
    ,AddressTypeShortName   nvarchar(10)      NOT NULL
+   ,AddressTypeName        nvarchar(50)      NOT NULL
    ,AddressTypeDescription nvarchar(300)     NULL
    ,SortOrderNumber        int               NULL
-   ,IsDefaultFlag          bit               NOT NULL CONSTRAINT Application_AddressType_IsDefaultFlag_Default DEFAULT (0)
-   ,IsLockedFlag           bit               NOT NULL CONSTRAINT Application_AddressType_IsLockedFlag_Default DEFAULT (0)
-   ,IsActiveFlag           bit               NOT NULL CONSTRAINT Application_AddressType_IsActiveFlag_Default DEFAULT (1)
-   ,RowModifyPersonId      int               NOT NULL CONSTRAINT Application_AddressType_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId      int               NOT NULL CONSTRAINT Application_AddressType_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime          datetimeoffset(7) NOT NULL CONSTRAINT Application_AddressType_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime          datetimeoffset(7) NOT NULL CONSTRAINT Application_AddressType_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp        rowversion        NOT NULL
+   ,IsDefault              bit               NOT NULL CONSTRAINT Application_AddressType_IsDefault_Default DEFAULT (0)
+   ,IsLocked               bit               NOT NULL CONSTRAINT Application_AddressType_IsLocked_Default DEFAULT (0)
+   ,IsActive               bit               NOT NULL CONSTRAINT Application_AddressType_IsActive_Default DEFAULT (1)
+   ,ModifyPersonId         int               NOT NULL CONSTRAINT Application_AddressType_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId         int               NOT NULL CONSTRAINT Application_AddressType_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime             datetimeoffset(7) NOT NULL CONSTRAINT Application_AddressType_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime             datetimeoffset(7) NOT NULL CONSTRAINT Application_AddressType_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp           rowversion        NOT NULL
    ,CONSTRAINT Application_AddressType_AddressTypeId PRIMARY KEY CLUSTERED (AddressTypeId ASC)
    ,INDEX Application_AddressType_AddressTypeName_AddressTypeShortName UNIQUE NONCLUSTERED (AddressTypeName ASC, AddressTypeShortName ASC)
-   ,INDEX Application_AddressType_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_AddressType_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_AddressType_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_AddressType_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -672,18 +703,18 @@ CREATE TABLE Application.EmailType (
    ,EmailTypeShortName   nvarchar(10)      NOT NULL
    ,EmailTypeDescription nvarchar(300)     NULL
    ,SortOrderNumber      int               NULL
-   ,IsDefaultFlag        bit               NOT NULL CONSTRAINT Application_EmailType_IsDefaultFlag_Default DEFAULT (0)
-   ,IsLockedFlag         bit               NOT NULL CONSTRAINT Application_EmailType_IsLockedFlag_Default DEFAULT (0)
-   ,IsActiveFlag         bit               NOT NULL CONSTRAINT Application_EmailType_IsActiveFlag_Default DEFAULT (1)
-   ,RowModifyPersonId    int               NOT NULL CONSTRAINT Application_EmailType_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId    int               NOT NULL CONSTRAINT Application_EmailType_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime        datetimeoffset(7) NOT NULL CONSTRAINT Application_EmailType_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime        datetimeoffset(7) NOT NULL CONSTRAINT Application_EmailType_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp      rowversion        NOT NULL
+   ,IsDefault            bit               NOT NULL CONSTRAINT Application_EmailType_IsDefault_Default DEFAULT (0)
+   ,IsLocked             bit               NOT NULL CONSTRAINT Application_EmailType_IsLocked_Default DEFAULT (0)
+   ,IsActive             bit               NOT NULL CONSTRAINT Application_EmailType_IsActive_Default DEFAULT (1)
+   ,ModifyPersonId       int               NOT NULL CONSTRAINT Application_EmailType_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId       int               NOT NULL CONSTRAINT Application_EmailType_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime           datetimeoffset(7) NOT NULL CONSTRAINT Application_EmailType_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime           datetimeoffset(7) NOT NULL CONSTRAINT Application_EmailType_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp         rowversion        NOT NULL
    ,CONSTRAINT Application_EmailType_EmailTypeId PRIMARY KEY CLUSTERED (EmailTypeId ASC)
    ,INDEX Application_EmailType_EmailTypeName_EmailTypeShortName UNIQUE NONCLUSTERED (EmailTypeName ASC, EmailTypeShortName ASC)
-   ,INDEX Application_EmailType_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_EmailType_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_EmailType_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_EmailType_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -723,21 +754,25 @@ GO
 **********************************************************************************************************************/
 
 CREATE TABLE Application.Address (
-    AddressId         int               NOT NULL IDENTITY(1, 1)
-   ,Line1             nvarchar(100)     NULL
-   ,Line2             nvarchar(100)     NULL
-   ,CityTownId        int               NULL CONSTRAINT Application_Address_Application_CityTown FOREIGN KEY REFERENCES Application.CityTown (CityTownId)
-   ,PostalCode        nvarchar(12)      NULL
-   ,RowModifyPersonId int               NOT NULL CONSTRAINT Application_Address_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId int               NOT NULL CONSTRAINT Application_Address_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_Address_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_Address_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp   rowversion        NOT NULL
+    AddressId      int               NOT NULL IDENTITY(1, 1)
+   ,Line1          nvarchar(100)     NULL
+   ,Line2          nvarchar(100)     NULL
+   ,CityTownId     int               NULL CONSTRAINT Application_Address_Application_CityTown FOREIGN KEY REFERENCES Application.CityTown (CityTownId)
+   ,PostalCode     nvarchar(12)      NULL
+   ,ModifyPersonId int               NOT NULL CONSTRAINT Application_Address_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId int               NOT NULL CONSTRAINT Application_Address_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_Address_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_Address_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp   rowversion        NOT NULL
+   ,ValidFromTime  datetime2(7)      GENERATED ALWAYS AS ROW START NOT NULL CONSTRAINT Address_ValidFromTime_Default DEFAULT (SYSUTCDATETIME())
+   ,ValidToTime    datetime2(7)      GENERATED ALWAYS AS ROW END NOT NULL CONSTRAINT Vendor_ValidToTime_Default DEFAULT ('9999-12-31 23:59:59.9999999')
    ,CONSTRAINT Application_Address_AddressId PRIMARY KEY CLUSTERED (AddressId ASC)
    ,INDEX Application_Address_CityTownId NONCLUSTERED (CityTownId ASC)
-   ,INDEX Application_Address_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_Address_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
-);
+   ,INDEX Application_Address_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_Address_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
+   ,PERIOD FOR SYSTEM_TIME(ValidFromTime, ValidToTime)
+)
+WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = History.Address));
 GO
 
 --TODO: ??? Add https://docs.microsoft.com/en-us/sql/t-sql/spatial-geography/spatial-types-geography?redirectedfrom=MSDN&view=sql-server-ver15
@@ -811,22 +846,22 @@ GO
 **********************************************************************************************************************/
 
 CREATE TABLE Application.PersonEmail (
-    PersonEmailId     int               NOT NULL IDENTITY(1, 1)
-   ,PersonId          int               NOT NULL CONSTRAINT Application_PersonEmail_Application_Person FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,EmailTypeId       tinyint           NOT NULL CONSTRAINT Application_PersonEmail_Application_EmailType FOREIGN KEY REFERENCES Application.EmailType (EmailTypeId)
-   ,EmailAddress      nvarchar(254)     NOT NULL
-   ,RowModifyPersonId int               NOT NULL CONSTRAINT Application_PersonEmail_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId int               NOT NULL CONSTRAINT Application_PersonEmail_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_PersonEmail_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_PersonEmail_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp   rowversion        NOT NULL
+    PersonEmailId  int               NOT NULL IDENTITY(1, 1)
+   ,PersonId       int               NOT NULL CONSTRAINT Application_PersonEmail_Application_Person FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,EmailTypeId    tinyint           NOT NULL CONSTRAINT Application_PersonEmail_Application_EmailType FOREIGN KEY REFERENCES Application.EmailType (EmailTypeId)
+   ,EmailAddress   nvarchar(254)     NOT NULL
+   ,ModifyPersonId int               NOT NULL CONSTRAINT Application_PersonEmail_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId int               NOT NULL CONSTRAINT Application_PersonEmail_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_PersonEmail_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_PersonEmail_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp   rowversion        NOT NULL
    ,CONSTRAINT Application_PersonEmail_PersonEmailId PRIMARY KEY CLUSTERED (PersonEmailId ASC)
    ,INDEX Application_PersonEmail_PersonId_EmailId_EmailTypeId UNIQUE NONCLUSTERED (PersonId ASC, EmailTypeId ASC, EmailAddress ASC)
    /* ,INDEX Application_PersonEmail_PersonId NONCLUSTERED (PersonId ASC) Do not need this index as it is the first key in the unique index */
    ,INDEX Application_PersonEmail_EmailTypeId NONCLUSTERED (EmailTypeId ASC)
    ,INDEX Application_PersonEmail_EmailAddress NONCLUSTERED (EmailAddress ASC)
-   ,INDEX Application_PersonEmail_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_PersonEmail_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_PersonEmail_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_PersonEmail_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -893,24 +928,24 @@ GO
 **********************************************************************************************************************/
 
 CREATE TABLE Application.Residence (
-    ResidenceId       int               NOT NULL IDENTITY(1, 1)
-   ,PersonId          int               NOT NULL CONSTRAINT Application_Residence_Application_Person FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,AddressTypeId     tinyint           NOT NULL CONSTRAINT Application_Residence_Application_AddressType FOREIGN KEY REFERENCES Application.AddressType (AddressTypeId)
-   ,Line1             nvarchar(100)     NULL
-   ,Line2             nvarchar(100)     NULL
-   ,CityTownId        int               NULL CONSTRAINT Application_Residence_Application_CityTown FOREIGN KEY REFERENCES Application.CityTown (CityTownId)
-   ,PostalCode        nvarchar(12)      NULL
-   ,RowModifyPersonId int               NOT NULL CONSTRAINT Application_Residence_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId int               NOT NULL CONSTRAINT Application_Residence_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_Residence_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_Residence_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp   rowversion        NOT NULL
+    ResidenceId    int               NOT NULL IDENTITY(1, 1)
+   ,PersonId       int               NOT NULL CONSTRAINT Application_Residence_Application_Person FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,AddressTypeId  int               NOT NULL CONSTRAINT Application_Residence_Application_AddressType FOREIGN KEY REFERENCES Application.AddressType (AddressTypeId)
+   ,Line1          nvarchar(100)     NULL
+   ,Line2          nvarchar(100)     NULL
+   ,CityTownId     int               NULL CONSTRAINT Application_Residence_Application_CityTown FOREIGN KEY REFERENCES Application.CityTown (CityTownId)
+   ,PostalCode     nvarchar(12)      NULL
+   ,ModifyPersonId int               NOT NULL CONSTRAINT Application_Residence_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId int               NOT NULL CONSTRAINT Application_Residence_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_Residence_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_Residence_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp   rowversion        NOT NULL
    ,CONSTRAINT Application_Residence_ResidenceId PRIMARY KEY CLUSTERED (ResidenceId ASC)
    ,INDEX Application_Residence_PersonId NONCLUSTERED (PersonId ASC)
    ,INDEX Application_Residence_AddressTypeId NONCLUSTERED (AddressTypeId ASC)
    ,INDEX Application_Residence_CityTownId NONCLUSTERED (CityTownId ASC)
-   ,INDEX Application_Residence_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_Residence_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_Residence_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_Residence_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -983,19 +1018,19 @@ GO
 --    ResidenceId       int               NOT NULL IDENTITY(1, 1)
 --   ,PersonId          int               NOT NULL CONSTRAINT Application_Residence_Application_Person FOREIGN KEY REFERENCES Application.Person (PersonId)
 --   ,AddressId         int               NOT NULL CONSTRAINT Application_Residence_Application_Address FOREIGN KEY REFERENCES Application.Address (AddressId)
---   ,AddressTypeId     tinyint           NOT NULL CONSTRAINT Application_Residence_Application_AddressType FOREIGN KEY REFERENCES Application.AddressType (AddressTypeId)
---   ,RowModifyPersonId int               NOT NULL CONSTRAINT Application_Residence_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
---   ,RowCreatePersonId int               NOT NULL CONSTRAINT Application_Residence_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
---   ,RowModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_Residence_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
---   ,RowCreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_Residence_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
---   ,RowVersionStamp   rowversion        NOT NULL
+--   ,AddressTypeId     int               NOT NULL CONSTRAINT Application_Residence_Application_AddressType FOREIGN KEY REFERENCES Application.AddressType (AddressTypeId)
+--   ,ModifyPersonId int               NOT NULL CONSTRAINT Application_Residence_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+--   ,CreatePersonId int               NOT NULL CONSTRAINT Application_Residence_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+--   ,ModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_Residence_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+--   ,CreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_Residence_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+--   ,VersionStamp   rowversion        NOT NULL
 --   ,CONSTRAINT Application_Residence_ResidenceId PRIMARY KEY CLUSTERED (ResidenceId ASC)
 --   ,INDEX Application_Residence_PersonId_AddressId_AddressTypeId UNIQUE NONCLUSTERED (PersonId ASC, AddressId ASC, AddressTypeId ASC)
 --   /* ,INDEX Application_Residence_PersonId NONCLUSTERED (PersonId ASC) Do not need this index as it is the first key in the unique index */
 --   ,INDEX Application_Residence_AddressId NONCLUSTERED (AddressId ASC)
 --   ,INDEX Application_Residence_AddressTypeId NONCLUSTERED (AddressTypeId ASC)
---   ,INDEX Application_Residence_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
---   ,INDEX Application_Residence_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+--   ,INDEX Application_Residence_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+--   ,INDEX Application_Residence_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 --);
 --GO
 
@@ -1057,19 +1092,23 @@ GO
 **********************************************************************************************************************/
 
 CREATE TABLE Application.Organization (
-    OrganizationId    int               NOT NULL IDENTITY(1, 1)
-   ,OrganizationName  nvarchar(200)     NOT NULL
-   ,WebsiteURL        nvarchar(2083)    NULL
-   ,RowModifyPersonId int               NOT NULL CONSTRAINT Application_Organization_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId int               NOT NULL CONSTRAINT Application_Organization_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_Organization_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_Organization_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp   rowversion        NOT NULL
+    OrganizationId   int               NOT NULL IDENTITY(1, 1)
+   ,OrganizationName nvarchar(200)     NOT NULL
+   ,WebsiteURL       nvarchar(2083)    NULL
+   ,ModifyPersonId   int               NOT NULL CONSTRAINT Application_Organization_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId   int               NOT NULL CONSTRAINT Application_Organization_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime       datetimeoffset(7) NOT NULL CONSTRAINT Application_Organization_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime       datetimeoffset(7) NOT NULL CONSTRAINT Application_Organization_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp     rowversion        NOT NULL
+   ,ValidFromTime    datetime2(7)      GENERATED ALWAYS AS ROW START NOT NULL CONSTRAINT Organization_ValidFromTime_Default DEFAULT (SYSUTCDATETIME())
+   ,ValidToTime      datetime2(7)      GENERATED ALWAYS AS ROW END NOT NULL CONSTRAINT Organization_ValidToTime_Default DEFAULT ('9999-12-31 23:59:59.9999999')
    ,CONSTRAINT Application_Organization_OrganizationId PRIMARY KEY CLUSTERED (OrganizationId ASC)
    ,INDEX Application_Organization_OrganizationName NONCLUSTERED (OrganizationName ASC)
-   ,INDEX Application_Organization_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_Organization_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
-);
+   ,INDEX Application_Organization_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_Organization_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
+   ,PERIOD FOR SYSTEM_TIME(ValidFromTime, ValidToTime)
+)
+WITH (SYSTEM_VERSIONING = ON (HISTORY_TABLE = History.Organization));
 GO
 
 
@@ -1081,20 +1120,20 @@ CREATE TABLE Sales.Customer (
     OrganizationId             int               NOT NULL CONSTRAINT Sales_Customer_Application_Organization FOREIGN KEY REFERENCES Application.Organization (OrganizationId)
    ,CreditLimit                decimal(18, 2)    NULL
    ,PaymentDays                int               NOT NULL
-   ,IsOnCreditHoldFlag         bit               NOT NULL
+   ,IsOnCreditHold             bit               NOT NULL
    ,AccountOpenedDate          datetimeoffset(7) NOT NULL
    ,StandardDiscountPercentage decimal(18, 3)    NOT NULL
-   ,RowModifyPersonId          int               NOT NULL CONSTRAINT Sales_Customer_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId          int               NOT NULL CONSTRAINT Sales_Customer_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime              datetimeoffset(7) NOT NULL CONSTRAINT Sales_Customer_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime              datetimeoffset(7) NOT NULL CONSTRAINT Sales_Customer_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp            rowversion        NOT NULL
+   ,ModifyPersonId             int               NOT NULL CONSTRAINT Sales_Customer_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId             int               NOT NULL CONSTRAINT Sales_Customer_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime                 datetimeoffset(7) NOT NULL CONSTRAINT Sales_Customer_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime                 datetimeoffset(7) NOT NULL CONSTRAINT Sales_Customer_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp               rowversion        NOT NULL
    ,CONSTRAINT Sales_Customer_OrganizationId PRIMARY KEY CLUSTERED (OrganizationId ASC)
    ,CONSTRAINT Sales_Customer_CreditLimit_Zero_Or_Greater CHECK (CreditLimit >= 0)
    ,CONSTRAINT Sales_Customer_PaymentDays_Zero_Or_Greater CHECK (PaymentDays >= 0)
    ,CONSTRAINT Sales_Customer_StandardDiscountPercentage_Zero_Or_Greater_To_One_Hundred CHECK (StandardDiscountPercentage >= 0 AND StandardDiscountPercentage <= 100)
-   ,INDEX Sales_Customer_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Sales_Customer_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Sales_Customer_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Sales_Customer_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -1103,18 +1142,18 @@ GO
 **********************************************************************************************************************/
 
 CREATE TABLE Purchasing.Supplier (
-    OrganizationId    int               NOT NULL CONSTRAINT Purchasing_Supplier_Application_Organization FOREIGN KEY REFERENCES Application.Organization (OrganizationId)
-   ,PaymentDays       int               NOT NULL
-   ,InternalComment   nvarchar(MAX)     NULL
-   ,RowModifyPersonId int               NOT NULL CONSTRAINT Purchasing_Supplier_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId int               NOT NULL CONSTRAINT Purchasing_Supplier_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Purchasing_Supplier_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Purchasing_Supplier_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp   rowversion        NOT NULL
+    OrganizationId  int               NOT NULL CONSTRAINT Purchasing_Supplier_Application_Organization FOREIGN KEY REFERENCES Application.Organization (OrganizationId)
+   ,PaymentDays     int               NOT NULL
+   ,InternalComment nvarchar(MAX)     NULL
+   ,ModifyPersonId  int               NOT NULL CONSTRAINT Purchasing_Supplier_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId  int               NOT NULL CONSTRAINT Purchasing_Supplier_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime      datetimeoffset(7) NOT NULL CONSTRAINT Purchasing_Supplier_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime      datetimeoffset(7) NOT NULL CONSTRAINT Purchasing_Supplier_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp    rowversion        NOT NULL
    ,CONSTRAINT Purchasing_Supplier_OrganizationId PRIMARY KEY CLUSTERED (OrganizationId ASC)
    ,CONSTRAINT Purchasing_Supplier_PaymentDays_Zero_Or_Greater CHECK (PaymentDays >= 0)
-   ,INDEX Purchasing_Supplier_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Purchasing_Supplier_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Purchasing_Supplier_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Purchasing_Supplier_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -1126,23 +1165,23 @@ CREATE TABLE Application.Location (
     LocationId          int               NOT NULL IDENTITY(1, 1)
    ,OrganizationId      int               NOT NULL CONSTRAINT Application_Location_Application_Organization FOREIGN KEY REFERENCES Application.Organization (OrganizationId)
    ,AddressId           int               NOT NULL CONSTRAINT Application_Location_Application_Address FOREIGN KEY REFERENCES Application.Address (AddressId)
-   ,AddressTypeId       tinyint           NOT NULL CONSTRAINT Application_Location_Application_AddressType FOREIGN KEY REFERENCES Application.AddressType (AddressTypeId)
+   ,AddressTypeId       int               NOT NULL CONSTRAINT Application_Location_Application_AddressType FOREIGN KEY REFERENCES Application.AddressType (AddressTypeId)
    ,LocationName        nvarchar(100)     NULL
    ,DeliverInstructions nvarchar(MAX)     NULL
    ,IsDeliverOnSunday   bit               NOT NULL
    ,IsDeliverOnSaturday bit               NOT NULL
-   ,RowModifyPersonId   int               NOT NULL CONSTRAINT Application_Location_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId   int               NOT NULL CONSTRAINT Application_Location_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime       datetimeoffset(7) NOT NULL CONSTRAINT Application_Location_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime       datetimeoffset(7) NOT NULL CONSTRAINT Application_Location_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp     rowversion        NOT NULL
+   ,ModifyPersonId      int               NOT NULL CONSTRAINT Application_Location_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId      int               NOT NULL CONSTRAINT Application_Location_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime          datetimeoffset(7) NOT NULL CONSTRAINT Application_Location_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime          datetimeoffset(7) NOT NULL CONSTRAINT Application_Location_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp        rowversion        NOT NULL
    ,CONSTRAINT Application_Location_LocationId PRIMARY KEY CLUSTERED (LocationId ASC)
    ,INDEX Application_Location_OrganizationId_AddressId_AddressTypeId UNIQUE NONCLUSTERED (OrganizationId ASC, AddressId ASC, AddressTypeId ASC)
    /* ,INDEX Application_Location_OrganizationId NONCLUSTERED (OrganizationId ASC) Do not need this index as it is the first key on the unique index */
    ,INDEX Application_Location_AddressId NONCLUSTERED (AddressId ASC)
    ,INDEX Application_Location_AddressTypeId NONCLUSTERED (AddressTypeId ASC)
-   ,INDEX Application_Location_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_Location_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_Location_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_Location_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -1156,18 +1195,18 @@ CREATE TABLE Application.PhoneType (
    ,PhoneTypeShortName   nvarchar(10)      NOT NULL
    ,PhoneTypeDescription nvarchar(300)     NULL
    ,SortOrderNumber      int               NULL
-   ,IsDefaultFlag        bit               NOT NULL CONSTRAINT Application_PhoneType_IsDefaultFlag_Default DEFAULT (0)
-   ,IsLockedFlag         bit               NOT NULL CONSTRAINT Application_PhoneType_IsLockedFlag_Default DEFAULT (0)
-   ,IsActiveFlag         bit               NOT NULL CONSTRAINT Application_PhoneType_IsActiveFlag_Default DEFAULT (1)
-   ,RowModifyPersonId    int               NOT NULL CONSTRAINT Application_PhoneType_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId    int               NOT NULL CONSTRAINT Application_PhoneType_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime        datetimeoffset(7) NOT NULL CONSTRAINT Application_PhoneType_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime        datetimeoffset(7) NOT NULL CONSTRAINT Application_PhoneType_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp      rowversion        NOT NULL
+   ,IsDefault            bit               NOT NULL CONSTRAINT Application_PhoneType_IsDefault_Default DEFAULT (0)
+   ,IsLocked             bit               NOT NULL CONSTRAINT Application_PhoneType_IsLocked_Default DEFAULT (0)
+   ,IsActive             bit               NOT NULL CONSTRAINT Application_PhoneType_IsActive_Default DEFAULT (1)
+   ,ModifyPersonId       int               NOT NULL CONSTRAINT Application_PhoneType_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId       int               NOT NULL CONSTRAINT Application_PhoneType_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime           datetimeoffset(7) NOT NULL CONSTRAINT Application_PhoneType_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime           datetimeoffset(7) NOT NULL CONSTRAINT Application_PhoneType_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp         rowversion        NOT NULL
    ,CONSTRAINT Application_PhoneType_PhoneTypeId PRIMARY KEY CLUSTERED (PhoneTypeId ASC)
    ,INDEX Application_PhoneType_PhoneTypeName_PhoneTypeShortName UNIQUE NONCLUSTERED (PhoneTypeName ASC, PhoneTypeShortName ASC)
-   ,INDEX Application_PhoneType_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_PhoneType_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_PhoneType_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_PhoneType_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -1180,18 +1219,18 @@ CREATE TABLE Application.OrganizationPhone (
    ,OrganizationId      int               NOT NULL CONSTRAINT Application_OrganizationPhone_Application_Organization FOREIGN KEY REFERENCES Application.Organization (OrganizationId)
    ,PhoneTypeId         tinyint           NOT NULL CONSTRAINT Application_OrganizationPhone_Application_PhoneType FOREIGN KEY REFERENCES Application.PhoneType (PhoneTypeId)
    ,PhoneNumber         nvarchar(50)      NOT NULL
-   ,RowModifyPersonId   int               NOT NULL CONSTRAINT Application_OrganizationPhone_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId   int               NOT NULL CONSTRAINT Application_OrganizationPhone_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime       datetimeoffset(7) NOT NULL CONSTRAINT Application_OrganizationPhone_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime       datetimeoffset(7) NOT NULL CONSTRAINT Application_OrganizationPhone_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp     rowversion        NOT NULL
+   ,ModifyPersonId      int               NOT NULL CONSTRAINT Application_OrganizationPhone_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId      int               NOT NULL CONSTRAINT Application_OrganizationPhone_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime          datetimeoffset(7) NOT NULL CONSTRAINT Application_OrganizationPhone_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime          datetimeoffset(7) NOT NULL CONSTRAINT Application_OrganizationPhone_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp        rowversion        NOT NULL
    ,CONSTRAINT Application_OrganizationPhone_OrganizationPhoneId PRIMARY KEY CLUSTERED (OrganizationPhoneId ASC)
    ,INDEX Application_OrganizationPhone_OrganizationId_PhoneTypeId_PhoneNumber UNIQUE NONCLUSTERED (OrganizationId ASC, PhoneTypeId ASC, PhoneNumber ASC)
    /* ,INDEX Application_OrganizationPhone_PersonId NONCLUSTERED (OrganizationPhoneId ASC) Do not need as the this is the first key in the unique index */
    ,INDEX Application_OrganizationPhone_PhoneTypeId NONCLUSTERED (PhoneTypeId ASC)
    ,INDEX Application_OrganizationPhone_PhoneNumber NONCLUSTERED (PhoneNumber ASC)
-   ,INDEX Application_OrganizationPhone_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_OrganizationPhone_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_OrganizationPhone_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_OrganizationPhone_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -1203,17 +1242,17 @@ CREATE TABLE Application.OrganizationPerson (
     OrganizationPersonId int               NOT NULL IDENTITY(1, 1)
    ,OrganizationId       int               NOT NULL CONSTRAINT Application_OrganizationPerson_Application_Organization FOREIGN KEY REFERENCES Application.Organization (OrganizationId)
    ,PersonId             int               NOT NULL CONSTRAINT Application_OrganizationPerson_Application_Person FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyPersonId    int               NOT NULL CONSTRAINT Application_OrganizationPerson_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId    int               NOT NULL CONSTRAINT Application_OrganizationPerson_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime        datetimeoffset(7) NOT NULL CONSTRAINT Application_OrganizationPerson_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime        datetimeoffset(7) NOT NULL CONSTRAINT Application_OrganizationPerson_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp      rowversion        NOT NULL
+   ,ModifyPersonId       int               NOT NULL CONSTRAINT Application_OrganizationPerson_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId       int               NOT NULL CONSTRAINT Application_OrganizationPerson_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime           datetimeoffset(7) NOT NULL CONSTRAINT Application_OrganizationPerson_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime           datetimeoffset(7) NOT NULL CONSTRAINT Application_OrganizationPerson_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp         rowversion        NOT NULL
    ,CONSTRAINT Application_OrganizationPerson_OrganizationPersonId PRIMARY KEY CLUSTERED (OrganizationPersonId ASC)
    ,INDEX Application_OrganizationPerson_OrganizationId_PersonId UNIQUE NONCLUSTERED (OrganizationId ASC, PersonId ASC)
    /* ,INDEX Application_OrganizationPerson_OrganizationId NONCLUSTERED (OrganizationId ASC) Do not need as it is the first key in the unique index */
    ,INDEX Application_OrganizationPerson_PersonId NONCLUSTERED (PersonId ASC)
-   ,INDEX Application_OrganizationPerson_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_OrganizationPerson_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_OrganizationPerson_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_OrganizationPerson_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -1226,18 +1265,18 @@ CREATE TABLE Application.OrganizationEmail (
    ,OrganizationId      int               NOT NULL CONSTRAINT Application_OrganizationEmail_Application_Organization FOREIGN KEY REFERENCES Application.Organization (OrganizationId)
    ,EmailTypeId         tinyint           NOT NULL CONSTRAINT Application_OrganizationEmail_Application_EmailType FOREIGN KEY REFERENCES Application.EmailType (EmailTypeId)
    ,EmailAddress        nvarchar(254)     NOT NULL
-   ,RowModifyPersonId   int               NOT NULL CONSTRAINT Application_OrganizationEmail_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId   int               NOT NULL CONSTRAINT Application_OrganizationEmail_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime       datetimeoffset(7) NOT NULL CONSTRAINT Application_OrganizationEmail_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime       datetimeoffset(7) NOT NULL CONSTRAINT Application_OrganizationEmail_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp     rowversion        NOT NULL
+   ,ModifyPersonId      int               NOT NULL CONSTRAINT Application_OrganizationEmail_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId      int               NOT NULL CONSTRAINT Application_OrganizationEmail_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime          datetimeoffset(7) NOT NULL CONSTRAINT Application_OrganizationEmail_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime          datetimeoffset(7) NOT NULL CONSTRAINT Application_OrganizationEmail_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp        rowversion        NOT NULL
    ,CONSTRAINT Application_OrganizationEmail_OrganizationEmailId PRIMARY KEY CLUSTERED (OrganizationEmailId ASC)
    ,INDEX Application_OrganizationEmail_OrganizationId_EmailId_EmailTypeId UNIQUE NONCLUSTERED (OrganizationId ASC, EmailTypeId ASC, EmailAddress ASC)
    /* ,INDEX Application_OrganizationEmail_OrganizationId NONCLUSTERED (OrganizationId ASC) Do not need as it is the first key in the unique index */
    ,INDEX Application_OrganizationEmail_EmailTypeId NONCLUSTERED (EmailTypeId ASC)
    ,INDEX Application_OrganizationEmail_EmailAddress NONCLUSTERED (EmailAddress ASC)
-   ,INDEX Application_OrganizationEmail_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_OrganizationEmail_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_OrganizationEmail_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_OrganizationEmail_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -1300,22 +1339,22 @@ GO
 **********************************************************************************************************************/
 
 CREATE TABLE Application.PersonPhone (
-    PersonPhoneId     int               NOT NULL
-   ,PersonId          int               NOT NULL CONSTRAINT Application_PersonPhone_Application_Person FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,PhoneTypeId       tinyint           NOT NULL CONSTRAINT Application_PersonPhone_Application_PhoneType FOREIGN KEY REFERENCES Application.PhoneType (PhoneTypeId)
-   ,PhoneNumber       nvarchar(50)      NOT NULL
-   ,RowModifyPersonId int               NOT NULL CONSTRAINT Application_PersonPhone_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId int               NOT NULL CONSTRAINT Application_PersonPhone_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_PersonPhone_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_PersonPhone_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp   rowversion        NOT NULL
+    PersonPhoneId  int               NOT NULL
+   ,PersonId       int               NOT NULL CONSTRAINT Application_PersonPhone_Application_Person FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,PhoneTypeId    tinyint           NOT NULL CONSTRAINT Application_PersonPhone_Application_PhoneType FOREIGN KEY REFERENCES Application.PhoneType (PhoneTypeId)
+   ,PhoneNumber    nvarchar(50)      NOT NULL
+   ,ModifyPersonId int               NOT NULL CONSTRAINT Application_PersonPhone_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId int               NOT NULL CONSTRAINT Application_PersonPhone_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_PersonPhone_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_PersonPhone_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp   rowversion        NOT NULL
    ,CONSTRAINT Application_PersonPhone_PersonPhoneId PRIMARY KEY CLUSTERED (PersonPhoneId ASC)
    ,INDEX Application_PersonPhone_PersonId_PhoneTypeId_PhoneNumber UNIQUE NONCLUSTERED (PersonId ASC, PhoneTypeId ASC, PhoneNumber ASC)
    /* ,INDEX Application_PersonPhone_PersonId NONCLUSTERED (PersonId ASC) Do not need as it is the first key in the unique index */
    ,INDEX Application_PersonPhone_PhoneTypeId NONCLUSTERED (PhoneTypeId ASC)
    ,INDEX Application_PersonPhone_PhoneNumber NONCLUSTERED (PhoneNumber ASC)
-   ,INDEX Application_PersonPhone_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_PersonPhone_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_PersonPhone_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_PersonPhone_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -1324,22 +1363,22 @@ GO
 **********************************************************************************************************************/
 
 CREATE TABLE Application.LocationPhone (
-    LocationPhoneId   int               NOT NULL IDENTITY(1, 1)
-   ,LocationId        int               NOT NULL CONSTRAINT Application_LocationPhone_Application_Location FOREIGN KEY REFERENCES Application.Location (LocationId)
-   ,PhoneTypeId       tinyint           NOT NULL CONSTRAINT Application_LocationPhone_Application_PhoneType FOREIGN KEY REFERENCES Application.PhoneType (PhoneTypeId)
-   ,PhoneNumber       nvarchar(50)      NOT NULL
-   ,RowModifyPersonId int               NOT NULL CONSTRAINT Application_LocationPhone_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId int               NOT NULL CONSTRAINT Application_LocationPhone_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_LocationPhone_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_LocationPhone_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp   rowversion        NOT NULL
+    LocationPhoneId int               NOT NULL IDENTITY(1, 1)
+   ,LocationId      int               NOT NULL CONSTRAINT Application_LocationPhone_Application_Location FOREIGN KEY REFERENCES Application.Location (LocationId)
+   ,PhoneTypeId     tinyint           NOT NULL CONSTRAINT Application_LocationPhone_Application_PhoneType FOREIGN KEY REFERENCES Application.PhoneType (PhoneTypeId)
+   ,PhoneNumber     nvarchar(50)      NOT NULL
+   ,ModifyPersonId  int               NOT NULL CONSTRAINT Application_LocationPhone_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId  int               NOT NULL CONSTRAINT Application_LocationPhone_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime      datetimeoffset(7) NOT NULL CONSTRAINT Application_LocationPhone_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime      datetimeoffset(7) NOT NULL CONSTRAINT Application_LocationPhone_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp    rowversion        NOT NULL
    ,CONSTRAINT Application_LocationPhone_LocationPhoneId PRIMARY KEY CLUSTERED (LocationPhoneId ASC)
    ,INDEX Application_LocationPhone_LocationId_PhoneTypeId_PhoneNumber UNIQUE NONCLUSTERED (LocationId ASC, PhoneTypeId ASC, PhoneNumber ASC)
    /* ,INDEX Application_LocationPhone_LocationId NONCLUSTERED (LocationId ASC) Do not need as it is the first key in the unique index */
    ,INDEX Application_LocationPhone_PhoneTypeId NONCLUSTERED (PhoneTypeId ASC)
    ,INDEX Application_LocationPhone_PhoneNumber NONCLUSTERED (PhoneNumber ASC)
-   ,INDEX Application_LocationPhone_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_LocationPhone_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_LocationPhone_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_LocationPhone_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -1353,18 +1392,18 @@ CREATE TABLE Application.DeliveryType (
    ,DeliveryTypeShortName   nvarchar(10)      NOT NULL
    ,DeliveryTypeDescription nvarchar(300)     NULL
    ,SortOrderNumber         int               NULL
-   ,IsDefaultFlag           bit               NOT NULL CONSTRAINT Application_DeliveryType_IsDefaultFlag_Default DEFAULT (0)
-   ,IsLockedFlag            bit               NOT NULL CONSTRAINT Application_DeliveryType_IsLockedFlag_Default DEFAULT (0)
-   ,IsActiveFlag            bit               NOT NULL CONSTRAINT Application_DeliveryType_IsActiveFlag_Default DEFAULT (1)
-   ,RowModifyPersonId       int               NOT NULL CONSTRAINT Application_DeliveryType_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId       int               NOT NULL CONSTRAINT Application_DeliveryType_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime           datetimeoffset(7) NOT NULL CONSTRAINT Application_DeliveryType_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime           datetimeoffset(7) NOT NULL CONSTRAINT Application_DeliveryType_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp         rowversion        NOT NULL
+   ,IsDefault               bit               NOT NULL CONSTRAINT Application_DeliveryType_IsDefault_Default DEFAULT (0)
+   ,IsLocked                bit               NOT NULL CONSTRAINT Application_DeliveryType_IsLocked_Default DEFAULT (0)
+   ,IsActive                bit               NOT NULL CONSTRAINT Application_DeliveryType_IsActive_Default DEFAULT (1)
+   ,ModifyPersonId          int               NOT NULL CONSTRAINT Application_DeliveryType_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId          int               NOT NULL CONSTRAINT Application_DeliveryType_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime              datetimeoffset(7) NOT NULL CONSTRAINT Application_DeliveryType_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime              datetimeoffset(7) NOT NULL CONSTRAINT Application_DeliveryType_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp            rowversion        NOT NULL
    ,CONSTRAINT Application_DeliveryType_DeliveryTypeId PRIMARY KEY CLUSTERED (DeliveryTypeId ASC)
    ,INDEX Application_DeliveryType_DeliveryTypeName_DeliveryTypeShortName UNIQUE NONCLUSTERED (DeliveryTypeName ASC, DeliveryTypeShortName ASC)
-   ,INDEX Application_DeliveryType_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_DeliveryType_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_DeliveryType_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_DeliveryType_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -1372,21 +1411,23 @@ GO
 ** Create Category
 **********************************************************************************************************************/
 
+--TODO: Should this be ProductCategory??? What to do with the linking table ProductCategory???
+
 CREATE TABLE Application.Category (
     CategoryId         int               NOT NULL IDENTITY(1, 1)
    ,ParentIdCategoryId int               NULL CONSTRAINT Application_Category_Application_ParentIdCategoryId FOREIGN KEY REFERENCES Application.Category (CategoryId)
    ,CategoryName       nvarchar(200)     NOT NULL
    ,CategorySlug       nvarchar(400)     NOT NULL
-   ,RowModifyPersonId  int               NOT NULL CONSTRAINT Application_Category_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId  int               NOT NULL CONSTRAINT Application_Category_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime      datetimeoffset(7) NOT NULL CONSTRAINT Application_Category_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime      datetimeoffset(7) NOT NULL CONSTRAINT Application_Category_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp    rowversion        NOT NULL
+   ,ModifyPersonId     int               NOT NULL CONSTRAINT Application_Category_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId     int               NOT NULL CONSTRAINT Application_Category_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime         datetimeoffset(7) NOT NULL CONSTRAINT Application_Category_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime         datetimeoffset(7) NOT NULL CONSTRAINT Application_Category_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp       rowversion        NOT NULL
    ,CONSTRAINT Application_Category_CategoryId PRIMARY KEY CLUSTERED (CategoryId ASC)
    ,INDEX Application_Category_ParentIdCategoryId NONCLUSTERED (ParentIdCategoryId ASC)
    ,INDEX Application_Category_CategorySlug UNIQUE NONCLUSTERED (CategorySlug ASC)
-   ,INDEX Application_Category_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_Category_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_Category_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_Category_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -1400,16 +1441,16 @@ CREATE TABLE Application.Product (
    ,ProductName        nvarchar(200)     NOT NULL
    ,ProductSlug        nvarchar(400)     NOT NULL
    ,ProductDescription nvarchar(MAX)     NULL
-   ,RowModifyPersonId  int               NOT NULL CONSTRAINT Application_Product_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId  int               NOT NULL CONSTRAINT Application_Product_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime      datetimeoffset(7) NOT NULL CONSTRAINT Application_Product_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime      datetimeoffset(7) NOT NULL CONSTRAINT Application_Product_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp    rowversion        NOT NULL
+   ,ModifyPersonId     int               NOT NULL CONSTRAINT Application_Product_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId     int               NOT NULL CONSTRAINT Application_Product_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime         datetimeoffset(7) NOT NULL CONSTRAINT Application_Product_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime         datetimeoffset(7) NOT NULL CONSTRAINT Application_Product_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp       rowversion        NOT NULL
    ,CONSTRAINT Application_Product_ProductId PRIMARY KEY CLUSTERED (ProductId ASC)
    ,INDEX Application_Product_ProductName UNIQUE NONCLUSTERED (ProductName ASC)
    ,INDEX Application_Product_ProductSlug UNIQUE NONCLUSTERED (ProductSlug ASC)
-   ,INDEX Application_Product_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_Product_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_Product_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_Product_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -1418,16 +1459,16 @@ GO
 **********************************************************************************************************************/
 
 CREATE TABLE Application.Image (
-    ImageId           int               NOT NULL IDENTITY(1, 1)
-   ,ImageURL          nvarchar(2083)    NOT NULL
-   ,RowModifyPersonId int               NOT NULL CONSTRAINT Application_Image_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId int               NOT NULL CONSTRAINT Application_Image_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_Image_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_Image_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp   rowversion        NOT NULL
+    ImageId        int               NOT NULL IDENTITY(1, 1)
+   ,ImageURL       nvarchar(2083)    NOT NULL
+   ,ModifyPersonId int               NOT NULL CONSTRAINT Application_Image_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId int               NOT NULL CONSTRAINT Application_Image_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_Image_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_Image_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp   rowversion        NOT NULL
    ,CONSTRAINT Application_Image_ImageId PRIMARY KEY CLUSTERED (ImageId ASC)
-   ,INDEX Application_Image_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_Image_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_Image_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_Image_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -1437,21 +1478,21 @@ GO
 **********************************************************************************************************************/
 
 CREATE TABLE Application.ProductImage (
-    ProductImageId    int               IDENTITY(1, 1) NOT NULL
-   ,ProductId         int               NOT NULL CONSTRAINT Application_ProductImage_Application_Product FOREIGN KEY REFERENCES Application.Product (ProductId)
-   ,ImageId           int               NOT NULL CONSTRAINT Application_ProductImage_Application_Image FOREIGN KEY REFERENCES Application.Image (ImageId)
-   ,IsThumbnailFlag   bit               NOT NULL CONSTRAINT Application_ProductImage_IsThumbnailFlag_Default DEFAULT (0)
-   ,SortOrderNumber   int               NULL
-   ,RowModifyPersonId int               NOT NULL CONSTRAINT Application_ProductImage_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId int               NOT NULL CONSTRAINT Application_ProductImage_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_ProductImage_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_ProductImage_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp   rowversion        NOT NULL
+    ProductImageId  int               IDENTITY(1, 1) NOT NULL
+   ,ProductId       int               NOT NULL CONSTRAINT Application_ProductImage_Application_Product FOREIGN KEY REFERENCES Application.Product (ProductId)
+   ,ImageId         int               NOT NULL CONSTRAINT Application_ProductImage_Application_Image FOREIGN KEY REFERENCES Application.Image (ImageId)
+   ,IsThumbnail     bit               NOT NULL CONSTRAINT Application_ProductImage_IsThumbnail_Default DEFAULT (0)
+   ,SortOrderNumber int               NULL
+   ,ModifyPersonId  int               NOT NULL CONSTRAINT Application_ProductImage_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId  int               NOT NULL CONSTRAINT Application_ProductImage_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime      datetimeoffset(7) NOT NULL CONSTRAINT Application_ProductImage_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime      datetimeoffset(7) NOT NULL CONSTRAINT Application_ProductImage_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp    rowversion        NOT NULL
    ,CONSTRAINT Application_ProductImage_ProductImageId PRIMARY KEY CLUSTERED (ProductImageId ASC)
    ,INDEX Application_ProductImage_ProductId_ImageId UNIQUE NONCLUSTERED (ProductId ASC, ImageId ASC)
    ,INDEX Application_ProductImage_ImageId NONCLUSTERED (ImageId ASC)
-   ,INDEX Application_ProductImage_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_ProductImage_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_ProductImage_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_ProductImage_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -1464,17 +1505,17 @@ CREATE TABLE Application.ProductCategory (
     ProductCategoryId int               NOT NULL IDENTITY(1, 1)
    ,ProductId         int               NOT NULL CONSTRAINT Application_ProductCategory_Application_Product FOREIGN KEY REFERENCES Application.Product (ProductId)
    ,CategoryId        int               NOT NULL CONSTRAINT Application_ProductCategory_Application_Category FOREIGN KEY REFERENCES Application.Category (CategoryId)
-   ,RowModifyPersonId int               NOT NULL CONSTRAINT Application_ProductCategory_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId int               NOT NULL CONSTRAINT Application_ProductCategory_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_ProductCategory_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_ProductCategory_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp   rowversion        NOT NULL
+   ,ModifyPersonId    int               NOT NULL CONSTRAINT Application_ProductCategory_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId    int               NOT NULL CONSTRAINT Application_ProductCategory_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime        datetimeoffset(7) NOT NULL CONSTRAINT Application_ProductCategory_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime        datetimeoffset(7) NOT NULL CONSTRAINT Application_ProductCategory_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp      rowversion        NOT NULL
    ,CONSTRAINT Application_ProductCategory_ProductCategoryId PRIMARY KEY CLUSTERED (ProductCategoryId ASC)
    ,INDEX Application_ProductCategory_ UNIQUE NONCLUSTERED (ProductId ASC, CategoryId ASC)
    /* ,INDEX Application_ProductCategory_ProductId NONCLUSTERED (ProductId ASC) Do not need as it is the first key */
    ,INDEX Application_ProductCategory_CategoryId NONCLUSTERED (CategoryId ASC)
-   ,INDEX Application_ProductCategory_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_ProductCategory_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_ProductCategory_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_ProductCategory_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -1483,16 +1524,16 @@ GO
 **********************************************************************************************************************/
 
 CREATE TABLE Application.Attribute (
-    AttributeId       int               NOT NULL IDENTITY(1, 1)
-   ,AttributeName     nvarchar(100)     NOT NULL
-   ,RowModifyPersonId int               NOT NULL CONSTRAINT Application_Attribute_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId int               NOT NULL CONSTRAINT Application_Attribute_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_Attribute_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_Attribute_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp   rowversion        NOT NULL
+    AttributeId    int               NOT NULL IDENTITY(1, 1)
+   ,AttributeName  nvarchar(100)     NOT NULL
+   ,ModifyPersonId int               NOT NULL CONSTRAINT Application_Attribute_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId int               NOT NULL CONSTRAINT Application_Attribute_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_Attribute_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_Attribute_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp   rowversion        NOT NULL
    ,CONSTRAINT Application_Attribute_AttributeId PRIMARY KEY CLUSTERED (AttributeId ASC)
-   ,INDEX Application_Attribute_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_Attribute_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_Attribute_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_Attribute_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -1501,19 +1542,19 @@ GO
 **********************************************************************************************************************/
 
 CREATE TABLE Application.AttributeTerm (
-    AttributeTermId   int               NOT NULL IDENTITY(1, 1)
-   ,AttributeId       int               NOT NULL CONSTRAINT Application_AttributeTerm_Application_Attribute FOREIGN KEY REFERENCES Application.Attribute (AttributeId)
-   ,TermName          nvarchar(100)     NOT NULL
-   ,RowModifyPersonId int               NOT NULL CONSTRAINT Application_AttributeTerm_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId int               NOT NULL CONSTRAINT Application_AttributeTerm_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_AttributeTerm_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_AttributeTerm_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp   rowversion        NOT NULL
+    AttributeTermId int               NOT NULL IDENTITY(1, 1)
+   ,AttributeId     int               NOT NULL CONSTRAINT Application_AttributeTerm_Application_Attribute FOREIGN KEY REFERENCES Application.Attribute (AttributeId)
+   ,TermName        nvarchar(100)     NOT NULL
+   ,ModifyPersonId  int               NOT NULL CONSTRAINT Application_AttributeTerm_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId  int               NOT NULL CONSTRAINT Application_AttributeTerm_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime      datetimeoffset(7) NOT NULL CONSTRAINT Application_AttributeTerm_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime      datetimeoffset(7) NOT NULL CONSTRAINT Application_AttributeTerm_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp    rowversion        NOT NULL
    ,CONSTRAINT Application_AttributeTerm_AttributeTermId PRIMARY KEY CLUSTERED (AttributeTermId ASC)
    ,INDEX Application_AttributeTerm_AttributeId NONCLUSTERED (AttributeId ASC)
    ,INDEX Application_AttributeTerm_TermName NONCLUSTERED (TermName ASC)
-   ,INDEX Application_AttributeTerm_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_AttributeTerm_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_AttributeTerm_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_AttributeTerm_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -1524,24 +1565,24 @@ CREATE TABLE Application.ProductItem (
     ProductItemId     int               NOT NULL IDENTITY(1, 1)
    ,ProductId         int               NOT NULL CONSTRAINT Application_ProductItem_Application_Product FOREIGN KEY REFERENCES Application.Product (ProductId)
    ,UPC               varchar(12)       NULL
-   ,IsEnableFlag      bit               NOT NULL
-   ,IsVirtualFlag     bit               NOT NULL
+   ,IsEnable          bit               NOT NULL
+   ,IsVirtual         bit               NOT NULL
    ,RegularPrice      decimal(18, 2)    NOT NULL
    ,SalePrice         decimal(18, 2)    NULL
    ,ManufactureCost   decimal(18, 2)    NULL
    ,DaysToManufacture int               NULL
-   ,RowModifyPersonId int               NOT NULL CONSTRAINT Application_ProductItem_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId int               NOT NULL CONSTRAINT Application_ProductItem_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_ProductItem_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_ProductItem_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp   rowversion        NOT NULL
+   ,ModifyPersonId    int               NOT NULL CONSTRAINT Application_ProductItem_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId    int               NOT NULL CONSTRAINT Application_ProductItem_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime        datetimeoffset(7) NOT NULL CONSTRAINT Application_ProductItem_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime        datetimeoffset(7) NOT NULL CONSTRAINT Application_ProductItem_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp      rowversion        NOT NULL
    ,CONSTRAINT Application_ProductItem_ProductItemId PRIMARY KEY CLUSTERED (ProductItemId ASC)
    ,CONSTRAINT Application_ProductItem_RegularPrice_Zero_Or_Greater CHECK (RegularPrice >= 0)
    ,CONSTRAINT Application_ProductItem_SalePrice_Zero_Or_Greater CHECK (SalePrice >= 0)
    ,CONSTRAINT Application_ProductItem_SalePrice_Less_Than_Or_Equal_To_RegularPrice CHECK (SalePrice <= RegularPrice)
    ,INDEX Application_ProductItem_ProductId NONCLUSTERED (ProductId ASC)
-   ,INDEX Application_ProductItem_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_ProductItem_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_ProductItem_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_ProductItem_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -1551,19 +1592,19 @@ GO
 **********************************************************************************************************************/
 
 CREATE TABLE Application.ProductVariant (
-    ProductVariantId  int               NOT NULL IDENTITY(1, 1)
-   ,ProductItemId     int               NOT NULL CONSTRAINT Application_ProductVariant_Application_ProductItem FOREIGN KEY REFERENCES Application.ProductItem (ProductItemId)
-   ,AttributeTermId   int               NOT NULL CONSTRAINT Application_ProductVariant_Application_AttributeTerm FOREIGN KEY REFERENCES Application.AttributeTerm (AttributeTermId)
-   ,RowModifyPersonId int               NOT NULL CONSTRAINT Application_ProductVariant_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId int               NOT NULL CONSTRAINT Application_ProductVariant_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_ProductVariant_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime     datetimeoffset(7) NOT NULL CONSTRAINT Application_ProductVariant_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp   rowversion        NOT NULL
+    ProductVariantId int               NOT NULL IDENTITY(1, 1)
+   ,ProductItemId    int               NOT NULL CONSTRAINT Application_ProductVariant_Application_ProductItem FOREIGN KEY REFERENCES Application.ProductItem (ProductItemId)
+   ,AttributeTermId  int               NOT NULL CONSTRAINT Application_ProductVariant_Application_AttributeTerm FOREIGN KEY REFERENCES Application.AttributeTerm (AttributeTermId)
+   ,ModifyPersonId   int               NOT NULL CONSTRAINT Application_ProductVariant_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId   int               NOT NULL CONSTRAINT Application_ProductVariant_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime       datetimeoffset(7) NOT NULL CONSTRAINT Application_ProductVariant_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime       datetimeoffset(7) NOT NULL CONSTRAINT Application_ProductVariant_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp     rowversion        NOT NULL
    ,CONSTRAINT Application_ProductVariant_ProductVariantId PRIMARY KEY CLUSTERED (ProductVariantId ASC)
    ,INDEX Application_ProductVariant_ProductItemId NONCLUSTERED (ProductItemId ASC)
    ,INDEX Application_ProductVariant_AttributeTermId NONCLUSTERED (AttributeTermId ASC)
-   ,INDEX Application_ProductVariant_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_ProductVariant_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_ProductVariant_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_ProductVariant_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -1578,7 +1619,7 @@ CREATE TABLE Purchasing.PurchaseOrder (
    ,ShipDate             datetimeoffset(7) NULL
    ,ExpectedDeliveryDate datetimeoffset(7) NULL
    ,SupplierReference    nvarchar(20)      NULL
-   ,IsOrderFinalizedFlag bit               NOT NULL CONSTRAINT Purchasing_PurchaseOrder_IsOrderFinalizedFlag_Default DEFAULT (0)
+   ,IsOrderFinalized     bit               NOT NULL CONSTRAINT Purchasing_PurchaseOrder_IsOrderFinalized_Default DEFAULT (0)
    ,DeliveryTypeId       tinyint           NOT NULL CONSTRAINT Purchasing_PurchaseOrder_Application_DeliveryType FOREIGN KEY REFERENCES Application.DeliveryType (DeliveryTypeId)
    ,ContactPersonId      int               NOT NULL CONSTRAINT Purchasing_PurchaseOrder_Application_ContactPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
    ,SubTotal             decimal(18, 2)    NOT NULL CONSTRAINT Purchasing_PurchaseOrder_SubTotal_Default DEFAULT (0.00)
@@ -1586,19 +1627,19 @@ CREATE TABLE Purchasing.PurchaseOrder (
    ,FreightAmount        decimal(18, 2)    NOT NULL CONSTRAINT Purchasing_PurchaseOrder_FreightAmount_Default DEFAULT (0.00)
    ,TotalDue             AS (ISNULL((SubTotal + TaxAmount) + FreightAmount, (0)))
    ,OrderComment         nvarchar(MAX)     NULL
-   ,RowModifyPersonId    int               NOT NULL CONSTRAINT Purchasing_PurchaseOrder_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId    int               NOT NULL CONSTRAINT Purchasing_PurchaseOrder_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime        datetimeoffset(7) NOT NULL CONSTRAINT Purchasing_PurchaseOrder_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime        datetimeoffset(7) NOT NULL CONSTRAINT Purchasing_PurchaseOrder_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp      rowversion        NOT NULL
+   ,ModifyPersonId       int               NOT NULL CONSTRAINT Purchasing_PurchaseOrder_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId       int               NOT NULL CONSTRAINT Purchasing_PurchaseOrder_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime           datetimeoffset(7) NOT NULL CONSTRAINT Purchasing_PurchaseOrder_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime           datetimeoffset(7) NOT NULL CONSTRAINT Purchasing_PurchaseOrder_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp         rowversion        NOT NULL
    ,CONSTRAINT Purchasing_PurchaseOrder_PurchaseOrderId PRIMARY KEY CLUSTERED (PurchaseOrderId ASC)
    ,CONSTRAINT Purchasing_PurchaseOrder_ShipDate_After_OrderDate_Or_NULL CHECK (ShipDate >= OrderDate OR ShipDate IS NULL)
    ,CONSTRAINT Purchasing_PurchaseOrder_ExpectedDeliveryDate_After_ShipDate CHECK (ExpectedDeliveryDate >= ShipDate OR ExpectedDeliveryDate IS NULL)
    ,INDEX Purchasing_PurchaseOrder_OrganizationId NONCLUSTERED (OrganizationId ASC)
    ,INDEX Purchasing_PurchaseOrder_DeliveryTypeId NONCLUSTERED (DeliveryTypeId ASC)
    ,INDEX Purchasing_PurchaseOrder_ContactPersonId NONCLUSTERED (ContactPersonId ASC)
-   ,INDEX Purchasing_PurchaseOrder_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Purchasing_PurchaseOrder_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Purchasing_PurchaseOrder_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Purchasing_PurchaseOrder_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -1687,7 +1728,7 @@ GO
 --   ,@level1type = N'TABLE'
 --   ,@level1name = N'PurchaseOrder'
 --   ,@level2type = N'COLUMN'
---   ,@level2name = N'IsOrderFinalizedFlag';
+--   ,@level2name = N'IsOrderFinalized';
 --GO
 
 --EXEC sys.sp_addextendedproperty
@@ -1720,18 +1761,18 @@ CREATE TABLE Application.UnitType (
    ,UnitTypeShortName   nvarchar(10)      NOT NULL
    ,UnitTypeDescription nvarchar(300)     NULL
    ,SortOrderNumber     int               NULL
-   ,IsDefaultFlag       bit               NOT NULL CONSTRAINT Application_UnitType_IsDefaultFlag_Default DEFAULT (0)
-   ,IsLockedFlag        bit               NOT NULL CONSTRAINT Application_UnitType_IsLockedFlag_Default DEFAULT (0)
-   ,IsActiveFlag        bit               NOT NULL CONSTRAINT Application_UnitType_IsActiveFlag_Default DEFAULT (1)
-   ,RowModifyPersonId   int               NOT NULL CONSTRAINT Application_UnitType_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId   int               NOT NULL CONSTRAINT Application_UnitType_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime       datetimeoffset(7) NOT NULL CONSTRAINT Application_UnitType_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime       datetimeoffset(7) NOT NULL CONSTRAINT Application_UnitType_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp     rowversion        NOT NULL
+   ,IsDefault           bit               NOT NULL CONSTRAINT Application_UnitType_IsDefault_Default DEFAULT (0)
+   ,IsLocked            bit               NOT NULL CONSTRAINT Application_UnitType_IsLocked_Default DEFAULT (0)
+   ,IsActive            bit               NOT NULL CONSTRAINT Application_UnitType_IsActive_Default DEFAULT (1)
+   ,ModifyPersonId      int               NOT NULL CONSTRAINT Application_UnitType_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId      int               NOT NULL CONSTRAINT Application_UnitType_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime          datetimeoffset(7) NOT NULL CONSTRAINT Application_UnitType_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime          datetimeoffset(7) NOT NULL CONSTRAINT Application_UnitType_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp        rowversion        NOT NULL
    ,CONSTRAINT Application_UnitType_UnitTypeId PRIMARY KEY CLUSTERED (UnitTypeId ASC)
    ,INDEX Application_UnitType_UnitTypeName_UnitTypeShortName UNIQUE NONCLUSTERED (UnitTypeName ASC, UnitTypeShortName ASC)
-   ,INDEX Application_UnitType_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Application_UnitType_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Application_UnitType_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Application_UnitType_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -1771,21 +1812,21 @@ GO
 **********************************************************************************************************************/
 --yyyyyy
 CREATE TABLE Purchasing.PurchaseOrderLine (
-    PurchaseOrderLineId      int               NOT NULL IDENTITY(1, 1)
-   ,PurchaseOrderId          int               NOT NULL CONSTRAINT Purchasing_PurchaseOrderLine_Purchasing_PurchaseOrder FOREIGN KEY REFERENCES Purchasing.PurchaseOrder (PurchaseOrderId)
-   ,ProductItemId            int               NOT NULL CONSTRAINT Purchasing_PurchaseOrderLine_Application_ProductItem FOREIGN KEY REFERENCES Application.ProductItem (ProductItemId)
-   ,UnitTypeId               tinyint           NOT NULL CONSTRAINT Purchasing_PurchaseOrderLine_Application_UnitType FOREIGN KEY REFERENCES Application.UnitType (UnitTypeId)
-   ,QuantityOrdered          int               NOT NULL /* Assess if fractional quantities are required */
-   ,QuantityReceived         int               NOT NULL /* Assess if fractional quantities are required */
-   ,UnitPrice                decimal(18, 2)    NOT NULL
-   ,DiscountPercentage       decimal(18, 3)    NULL
-   ,NetAmount                decimal(18, 2)    NOT NULL
-   ,IsOrderLineFinalizedFlag bit               NOT NULL
-   ,RowModifyPersonId        int               NOT NULL CONSTRAINT Purchasing_PurchaseOrderLine_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId        int               NOT NULL CONSTRAINT Purchasing_PurchaseOrderLine_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime            datetimeoffset(7) NOT NULL CONSTRAINT Purchasing_PurchaseOrderLine_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime            datetimeoffset(7) NOT NULL CONSTRAINT Purchasing_PurchaseOrderLine_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp          rowversion        NOT NULL
+    PurchaseOrderLineId  int               NOT NULL IDENTITY(1, 1)
+   ,PurchaseOrderId      int               NOT NULL CONSTRAINT Purchasing_PurchaseOrderLine_Purchasing_PurchaseOrder FOREIGN KEY REFERENCES Purchasing.PurchaseOrder (PurchaseOrderId)
+   ,ProductItemId        int               NOT NULL CONSTRAINT Purchasing_PurchaseOrderLine_Application_ProductItem FOREIGN KEY REFERENCES Application.ProductItem (ProductItemId)
+   ,UnitTypeId           tinyint           NOT NULL CONSTRAINT Purchasing_PurchaseOrderLine_Application_UnitType FOREIGN KEY REFERENCES Application.UnitType (UnitTypeId)
+   ,QuantityOrdered      int               NOT NULL /* Assess if fractional quantities are required */
+   ,QuantityReceived     int               NOT NULL /* Assess if fractional quantities are required */
+   ,UnitPrice            decimal(18, 2)    NOT NULL
+   ,DiscountPercentage   decimal(18, 3)    NULL
+   ,NetAmount            decimal(18, 2)    NOT NULL
+   ,IsOrderLineFinalized bit               NOT NULL
+   ,ModifyPersonId       int               NOT NULL CONSTRAINT Purchasing_PurchaseOrderLine_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId       int               NOT NULL CONSTRAINT Purchasing_PurchaseOrderLine_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime           datetimeoffset(7) NOT NULL CONSTRAINT Purchasing_PurchaseOrderLine_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime           datetimeoffset(7) NOT NULL CONSTRAINT Purchasing_PurchaseOrderLine_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp         rowversion        NOT NULL
    ,CONSTRAINT Purchasing_PurchaseOrderLine_PurchaseOrderLineId PRIMARY KEY CLUSTERED (PurchaseOrderLineId ASC)
    ,CONSTRAINT Purchasing_PurchaseOrderLine_QuantityOrdered_Zero_Or_Greater CHECK (QuantityOrdered >= 0)
    ,CONSTRAINT Purchasing_PurchaseOrderLine_QuantityReceived_Zero_Or_Greater CHECK (QuantityReceived >= 0)
@@ -1795,8 +1836,8 @@ CREATE TABLE Purchasing.PurchaseOrderLine (
    ,INDEX Purchasing_PurchaseOrderLine_PurchaseOrderId NONCLUSTERED (PurchaseOrderId ASC)
    ,INDEX Purchasing_PurchaseOrderLine_ProductItemId NONCLUSTERED (ProductItemId ASC)
    ,INDEX Purchasing_PurchaseOrderLine_UnitTypeId NONCLUSTERED (UnitTypeId ASC)
-   ,INDEX Purchasing_PurchaseOrderLine_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Purchasing_PurchaseOrderLine_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Purchasing_PurchaseOrderLine_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Purchasing_PurchaseOrderLine_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -1908,7 +1949,7 @@ GO
 --   ,@level1type = N'TABLE'
 --   ,@level1name = N'PurchaseOrderLine'
 --   ,@level2type = N'COLUMN'
---   ,@level2name = N'IsOrderLineFinalizedFlag';
+--   ,@level2name = N'IsOrderLineFinalized';
 --GO
 
 --EXEC sys.sp_addextendedproperty
@@ -1931,14 +1972,14 @@ CREATE TABLE Sales.CreditCard (
    ,CardVerificationValue smallint          NOT NULL CONSTRAINT Sales_CreditCard_CardVerificationValue_Zero_To_Four_Digits CHECK (CardVerificationValue >= 0 OR CardVerificationValue <= 9999)
    ,ExpirationMonth       tinyint           NOT NULL CONSTRAINT Sales_CreditCard_ExpirationMonth_Valid_Month_Number CHECK (ExpirationMonth >= 1 OR ExpirationMonth <= 12)
    ,ExpirationYear        smallint          NOT NULL CONSTRAINT Sales_CreditCard_ExpirationYear_Valid_Year_Or_Greater CHECK (ExpirationYear >= YEAR(SYSDATETIMEOFFSET()))
-   ,RowModifyPersonId     int               NOT NULL CONSTRAINT Sales_CreditCard_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId     int               NOT NULL CONSTRAINT Sales_CreditCard_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime         datetimeoffset(7) NOT NULL CONSTRAINT Sales_CreditCard_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime         datetimeoffset(7) NOT NULL CONSTRAINT Sales_CreditCard_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp       rowversion        NOT NULL
+   ,ModifyPersonId        int               NOT NULL CONSTRAINT Sales_CreditCard_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId        int               NOT NULL CONSTRAINT Sales_CreditCard_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime            datetimeoffset(7) NOT NULL CONSTRAINT Sales_CreditCard_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime            datetimeoffset(7) NOT NULL CONSTRAINT Sales_CreditCard_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp          rowversion        NOT NULL
    ,CONSTRAINT Sales_CreditCard_CreditCardId PRIMARY KEY CLUSTERED (CreditCardId ASC)
-   ,INDEX Sales_CreditCard_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Sales_CreditCard_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Sales_CreditCard_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Sales_CreditCard_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 
 
@@ -1985,8 +2026,8 @@ CREATE TABLE Sales.SalesOrder (
    ,DueDate                datetimeoffset(7) NOT NULL
    ,ShipDate               datetimeoffset(7) NULL --
    ,PurchaseOrderNumber    nvarchar(50)      NULL
-   ,IsOrderFinalizedFlag   bit               NOT NULL CONSTRAINT Sales_SalesOrder_IsOrderFinalizedFlag_Default DEFAULT (0)
-   ,IsOnlineOrderFlag      bit               NOT NULL CONSTRAINT Sales_SalesOrder_IsOnlineOrderFlag_Default DEFAULT (1)
+   ,IsOrderFinalized       bit               NOT NULL CONSTRAINT Sales_SalesOrder_IsOrderFinalized_Default DEFAULT (0)
+   ,IsOnlineOrder          bit               NOT NULL CONSTRAINT Sales_SalesOrder_IsOnlineOrder_Default DEFAULT (1)
    ,DeliveryTypeId         tinyint           NOT NULL CONSTRAINT Sales_SalesOrder_Application_DeliveryType FOREIGN KEY REFERENCES Application.DeliveryType (DeliveryTypeId)
    ,SalesPersonId          int               NOT NULL CONSTRAINT Sales_SalesOrder_Application_SalesPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
    ,BillToLocationId       int               NOT NULL CONSTRAINT Sales_SalesOrder_Application_BillToLocation FOREIGN KEY REFERENCES Application.Location (LocationId)
@@ -1998,11 +2039,11 @@ CREATE TABLE Sales.SalesOrder (
    ,FreightAmount          decimal(18, 2)    NOT NULL CONSTRAINT Sales_SalesOrder_FreightAmount_Default DEFAULT (0.00)
    ,TotalDue               AS (ISNULL((SubTotal + TaxAmount) + FreightAmount, (0)))
    ,OrderComment           nvarchar(MAX)     NULL
-   ,RowModifyPersonId      int               NOT NULL CONSTRAINT Sales_SalesOrder_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId      int               NOT NULL CONSTRAINT Sales_SalesOrder_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime          datetimeoffset(7) NOT NULL CONSTRAINT Sales_SalesOrder_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime          datetimeoffset(7) NOT NULL CONSTRAINT Sales_SalesOrder_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp        rowversion        NOT NULL
+   ,ModifyPersonId         int               NOT NULL CONSTRAINT Sales_SalesOrder_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId         int               NOT NULL CONSTRAINT Sales_SalesOrder_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime             datetimeoffset(7) NOT NULL CONSTRAINT Sales_SalesOrder_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime             datetimeoffset(7) NOT NULL CONSTRAINT Sales_SalesOrder_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp           rowversion        NOT NULL
    ,CONSTRAINT Sales_SalesOrder_SalesOrderId PRIMARY KEY CLUSTERED (SalesOrderId ASC)
    ,CONSTRAINT Sales_SalesOrder_DueDate_After_OrderDate CHECK (DueDate >= OrderDate)
    ,CONSTRAINT Sales_SalesOrderHeader_ShipDate_After_OrderDate_Or_NULL CHECK (ShipDate >= OrderDate OR ShipDate IS NULL)
@@ -2013,8 +2054,8 @@ CREATE TABLE Sales.SalesOrder (
    ,INDEX Sales_SalesOrder_BillToLocationId NONCLUSTERED (BillToLocationId ASC)
    ,INDEX Sales_SalesOrder_ShipToLocationId NONCLUSTERED (ShipToLocationId ASC)
    ,INDEX Sales_SalesOrder_CreditCardId NONCLUSTERED (CreditCardId ASC)
-   ,INDEX Sales_SalesOrder_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Sales_SalesOrder_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Sales_SalesOrder_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Sales_SalesOrder_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -2045,10 +2086,10 @@ GO
 --EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Default constraint value of 1' , @level0type=N'SCHEMA',@level0name=N'Sales', @level1type=N'TABLE',@level1name=N'SalesOrderHeader', @level2type=N'CONSTRAINT',@level2name=N'DF_SalesOrderHeader_Status'
 --GO
 
---EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'0 = Order placed by sales person. 1 = Order placed online by customer.' , @level0type=N'SCHEMA',@level0name=N'Sales', @level1type=N'TABLE',@level1name=N'SalesOrderHeader', @level2type=N'COLUMN',@level2name=N'OnlineOrderFlag'
+--EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'0 = Order placed by sales person. 1 = Order placed online by customer.' , @level0type=N'SCHEMA',@level0name=N'Sales', @level1type=N'TABLE',@level1name=N'SalesOrderHeader', @level2type=N'COLUMN',@level2name=N'OnlineOrder'
 --GO
 
---EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Default constraint value of 1 (TRUE)' , @level0type=N'SCHEMA',@level0name=N'Sales', @level1type=N'TABLE',@level1name=N'SalesOrderHeader', @level2type=N'CONSTRAINT',@level2name=N'DF_SalesOrderHeader_OnlineOrderFlag'
+--EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Default constraint value of 1 (TRUE)' , @level0type=N'SCHEMA',@level0name=N'Sales', @level1type=N'TABLE',@level1name=N'SalesOrderHeader', @level2type=N'CONSTRAINT',@level2name=N'DF_SalesOrderHeader_OnlineOrder'
 --GO
 
 --EXEC sys.sp_addextendedproperty @name=N'MS_Description', @value=N'Unique sales order identification number.' , @level0type=N'SCHEMA',@level0name=N'Sales', @level1type=N'TABLE',@level1name=N'SalesOrderHeader', @level2type=N'COLUMN',@level2name=N'SalesOrderNumber'
@@ -2177,24 +2218,25 @@ GO
 **********************************************************************************************************************/
 --xxxxxx
 CREATE TABLE Sales.SalesOrderLine (
-    SalesOrderLineId         int               IDENTITY(1, 1) NOT NULL
-   ,SalesOrderId             int               NOT NULL CONSTRAINT Sales_SalesOrderLine_Purchasing_PurchaseOrder FOREIGN KEY REFERENCES Sales.SalesOrder (SalesOrderId)
-   ,QuantityOrdered          int               NOT NULL CONSTRAINT Sales_SalesOrderDetail_Zero_Or_Greater CHECK (QuantityOrdered > 0)/* Assess if fractional quantities are required */
-   ,ProductItemId            int               NOT NULL CONSTRAINT Sales_SalesOrderLine_Application_ProductItem FOREIGN KEY REFERENCES Application.ProductItem (ProductItemId)
-   ,UnitPrice                decimal(18, 2)    NOT NULL CONSTRAINT Sales_SalesOrderLine_UnitPrice_Zero_Or_Greater CHECK (UnitPrice >= 0.00)
-   ,UnitPriceDiscount        decimal(18, 2)    NOT NULL CONSTRAINT Sales_SalesOrderDetail_UnitPriceDiscount_Default DEFAULT (0.00) CONSTRAINT Sales_SalesOrderDetail_UnitPriceDiscount_Zero_Or_Greater CHECK (UnitPriceDiscount >= 0.00)
-   ,LineTotal                AS (ISNULL((UnitPrice * ((1.00) - UnitPriceDiscount)) * QuantityOrdered, (0.00)))
-   ,IsOrderLineFinalizedFlag bit               NOT NULL
-   ,RowModifyPersonId        int               NOT NULL CONSTRAINT Sales_SalesOrderLine_Application_RowModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowCreatePersonId        int               NOT NULL CONSTRAINT Sales_SalesOrderLine_Application_RowCreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
-   ,RowModifyTime            datetimeoffset(7) NOT NULL CONSTRAINT Sales_SalesOrderLine_RowModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowCreateTime            datetimeoffset(7) NOT NULL CONSTRAINT Sales_SalesOrderLine_RowCreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
-   ,RowVersionStamp          rowversion        NOT NULL
+    SalesOrderLineId     int               IDENTITY(1, 1) NOT NULL
+   ,SalesOrderId         int               NOT NULL CONSTRAINT Sales_SalesOrderLine_Purchasing_PurchaseOrder FOREIGN KEY REFERENCES Sales.SalesOrder (SalesOrderId)
+   ,QuantityOrdered      int               NOT NULL CONSTRAINT Sales_SalesOrderDetail_Zero_Or_Greater CHECK (QuantityOrdered > 0)/* Assess if fractional quantities are required */
+   ,ProductItemId        int               NOT NULL CONSTRAINT Sales_SalesOrderLine_Application_ProductItem FOREIGN KEY REFERENCES Application.ProductItem (ProductItemId)
+   ,UnitPrice            decimal(18, 2)    NOT NULL CONSTRAINT Sales_SalesOrderLine_UnitPrice_Zero_Or_Greater CHECK (UnitPrice >= 0.00)
+   ,UnitPriceDiscount    decimal(18, 2)    NOT NULL CONSTRAINT Sales_SalesOrderDetail_UnitPriceDiscount_Default DEFAULT (0.00)
+        CONSTRAINT Sales_SalesOrderDetail_UnitPriceDiscount_Zero_Or_Greater CHECK (UnitPriceDiscount >= 0.00)
+   ,LineTotal            AS (ISNULL((UnitPrice * ((1.00) - UnitPriceDiscount)) * QuantityOrdered, (0.00)))
+   ,IsOrderLineFinalized bit               NOT NULL
+   ,ModifyPersonId       int               NOT NULL CONSTRAINT Sales_SalesOrderLine_Application_ModifyPerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,CreatePersonId       int               NOT NULL CONSTRAINT Sales_SalesOrderLine_Application_CreatePerson FOREIGN KEY REFERENCES Application.Person (PersonId)
+   ,ModifyTime           datetimeoffset(7) NOT NULL CONSTRAINT Sales_SalesOrderLine_ModifyTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,CreateTime           datetimeoffset(7) NOT NULL CONSTRAINT Sales_SalesOrderLine_CreateTime_Default DEFAULT (SYSDATETIMEOFFSET())
+   ,VersionStamp         rowversion        NOT NULL
    ,CONSTRAINT Sales_SalesOrderLine_PurchaseOrderLineId PRIMARY KEY CLUSTERED (SalesOrderLineId ASC)
-   ,INDEX Sales_SalesOrderLine_SalesOrderId_IsOrderLineFinalizedFlag NONCLUSTERED (SalesOrderId ASC, IsOrderLineFinalizedFlag ASC)
+   ,INDEX Sales_SalesOrderLine_SalesOrderId_IsOrderLineFinalized NONCLUSTERED (SalesOrderId ASC, IsOrderLineFinalized ASC)
    ,INDEX Sales_SalesOrderLine_ProductItemId NONCLUSTERED (ProductItemId ASC)
-   ,INDEX Sales_SalesOrderLine_RowModifyPersonId NONCLUSTERED (RowModifyPersonId ASC)
-   ,INDEX Sales_SalesOrderLine_RowCreatePersonId NONCLUSTERED (RowCreatePersonId ASC)
+   ,INDEX Sales_SalesOrderLine_ModifyPersonId NONCLUSTERED (ModifyPersonId ASC)
+   ,INDEX Sales_SalesOrderLine_CreatePersonId NONCLUSTERED (CreatePersonId ASC)
 );
 GO
 
@@ -2644,7 +2686,7 @@ GO
 
 EXEC sys.sp_addextendedproperty
     @name = N'Example Values'
-   ,@value = N'1, 2, �, 12'
+   ,@value = N'1, 2, …, 12'
    ,@level0type = N'SCHEMA'
    ,@level0name = N'Application'
    ,@level1type = N'TABLE'
@@ -2798,7 +2840,7 @@ GO
 
 EXEC sys.sp_addextendedproperty
     @name = N'Example Values'
-   ,@value = N'1, 2, �, 12'
+   ,@value = N'1, 2, …, 12'
    ,@level0type = N'SCHEMA'
    ,@level0name = N'Application'
    ,@level1type = N'TABLE'
@@ -2923,6 +2965,69 @@ EXEC sys.sp_addextendedproperty
 GO
 
 /**********************************************************************************************************************
+** CREATE FUNCTION #dbo.RemoveCharactersFromString
+**********************************************************************************************************************/
+CREATE FUNCTION dbo.RemoveCharactersFromString (@String nvarchar(4000), @MatchExpression varchar(255))
+RETURNS table
+AS
+    RETURN
+
+    /* How to use
+
+    ## Alphabetic Only ##
+    SELECT * FROM dbo.RemoveCharactersFromString(N'T1!e2@x3#t4$ Only Accents Characters ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ Chinese Characters 凯文', 'a-zA-Z⺀-⿕')
+    SELECT * FROM dbo.RemoveCharactersFromString(N'T1!e2@x3#t4$ Only Accents Characters ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ Chinese Characters 凯文', 'a-zA-Z')
+
+    ## No Alphabetics ##
+    SELECT * FROM dbo.RemoveCharactersFromString(N'T1!e2@x3#t4$ Only Accents Characters ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ Chinese Characters 凯文', '^a-zA-Z')
+
+    ## Numeric Only ##
+    SELECT * FROM dbo.RemoveCharactersFromString(N'T1!e2@x3#t4$ Only Accents Characters ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ Chinese Characters 凯文', '0-9')
+
+    ## No Numerics ##
+    SELECT * FROM dbo.RemoveCharactersFromString(N'T1!e2@x3#t4$ Only Accents Characters ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ Chinese Characters 凯文', '^0-9')
+
+    ## Alphanumeric Only ##
+    SELECT * FROM dbo.RemoveCharactersFromString(N'T1!e2@x3#t4$ Only Accents Characters ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ Chinese Characters 凯文', 'a-zA-Z0-9')
+
+    ## No Alphanumerics ##
+    SELECT * FROM dbo.RemoveCharactersFromString(N'T1!e2@x3#t4$ Only Accents Characters ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ Chinese Characters 凯文', '^a-zA-Z0-9')
+
+    ## Non-alphanumeric with Spaces ##
+    SELECT * FROM dbo.RemoveCharactersFromString(N'T1!e2@x3#t4$ Only Accents Characters ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞßàáâãäåæçèéêëìíîïðñòóôõöøùúûüýþÿ Chinese Characters 凯文', ' a-zA-Z0-9')
+
+    ## Can also remove carriage returns, line feeds and tabs ##
+    SELECT * FROM dbo.RemoveCharactersFromString(N'Some text, other text.  ''.,!?/<>"[]{}|`~@#$%^&*()-+=/\:;市汇
+
+    After a CR/LF!' + + CHAR(13) + CHAR(10) + CHAR(9) + N'After CR/LF & tab character.', 'a-zA-Z0-9')
+
+    */
+
+    WITH Numbers
+      AS (
+          SELECT TOP (ISNULL(DATALENGTH(@String), 0))
+              n = ROW_NUMBER() OVER (ORDER BY (SELECT NULL))
+          FROM (VALUES (0), (0), (0), (0)) AS d (n)
+             ,(VALUES (0), (0), (0), (0), (0), (0), (0), (0), (0), (0)) AS E (n)
+             ,(VALUES (0), (0), (0), (0), (0), (0), (0), (0), (0), (0)) AS F (n)
+             ,(VALUES (0), (0), (0), (0), (0), (0), (0), (0), (0), (0)) AS g (n)
+      )
+    SELECT
+        String = N'' + (
+                           SELECT
+                               N.StringCharacter
+                           FROM
+                               Numbers
+                           CROSS APPLY (SELECT SUBSTRING(@String, n, 1)) AS N(StringCharacter)
+                           WHERE
+                               N.StringCharacter LIKE '%[' + @MatchExpression + ']%'
+                           ORDER BY
+                               Numbers.n
+                           FOR XML PATH(''), TYPE
+                       ).value('.', 'nvarchar(4000)');
+GO
+
+/**********************************************************************************************************************
 ** Create stored procedures using sp_CRUDGen
 **********************************************************************************************************************/
 --EXEC dbo.sp_CRUDGen
@@ -2938,6 +3043,8 @@ GO
 --   ,@GenerateDelete = 1
 --   ,@GenerateDeleteMultiple = 0
 --   ,@GenerateSearch = 0
+
+
 
 
 --Future TODO: Only add what is required for coursework now and add other table models for more samples.
@@ -2963,3 +3070,23 @@ GO
 --TODO: Power BI
 --TODO: SSRS reports
 
+
+
+/**********************************************************************************************************************
+ ** Testing paramater sniffing with skewed data distrobution
+ **********************************************************************************************************************/
+--SET QUOTED_IDENTIFIER, ANSI_NULLS ON;
+--GO
+--CREATE OR ALTER PROCEDURE Application.PersonLastNameSearch (@LastName nvarchar(100))
+--AS
+--    BEGIN
+--        SET NOCOUNT, XACT_ABORT ON;
+
+--        SELECT PersonId, LastName FROM Application.Person WHERE LastName = @LastName;
+
+--    END;
+--GO
+
+--DBCC FREEPROCCACHE
+--EXEC Application.PersonLastNameSearch @LastName = N'Baxter';
+--EXEC Application.PersonLastNameSearch @LastName = N'Martin';
